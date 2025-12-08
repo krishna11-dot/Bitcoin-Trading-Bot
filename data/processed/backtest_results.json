@@ -1,0 +1,19 @@
+{
+  "initial_capital": 10000,
+  "final_value": 8574.91300175309,
+  "total_return": -0.14250869982469103,
+  "sharpe_ratio": -1.3528914155999465,
+  "max_drawdown": -0.20504387033388233,
+  "win_rate": 0.0,
+  "num_trades": 19,
+  "avg_trade_return": -0.07858326706365618,
+  "buy_and_hold_return": -0.2007939916743599,
+  "ml_direction_accuracy": 0.4972375690607735,
+  "ml_price_rmse": 14986.290496235686,
+  "rsi_signal_win_rate": 0,
+  "macd_signal_win_rate": 0,
+  "fg_correlation": 0.005193992148181381,
+  "dca_win_rate": 0.0,
+  "swing_win_rate": 0,
+  "stop_loss_win_rate": 0
+}
