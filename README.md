@@ -232,7 +232,7 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
 
 #### Natural Language Interface (Mode: chat)
 
-**Single-Agent LangGraph Architecture with Three Data Sources:**
+**Single-Agent LangGraph Architecture with Four Data Sources:**
 
 ```
 User Question: "What's today's Bitcoin price?"
@@ -241,16 +241,18 @@ User Question: "What's today's Bitcoin price?"
        ↓
 2. Validate Node (Guardrails) → Validates intent is safe (not malicious)
        ↓
-3. Execute Node → Fetches data from THREE sources:
+3. Execute Node → Fetches data from FOUR sources:
        ├─→ MCP (CoinGecko API): Live BTC price ($89,083 as of Dec 7, 2025)
        ├─→ CSV Historical Data: Technical indicators (RSI, MACD, ATR)
-       └─→ RAG System: Similar historical patterns (ChromaDB vector search)
+       ├─→ RAG System: Similar historical patterns (ChromaDB vector search)
+       └─→ Backtesting Results: Strategy performance, trade history, metrics
        ↓
-       Combines all three sources into structured data
+       Combines all four sources into structured data
        ↓
 4. Respond Node (Gemini LLM) → Formats as natural language:
    "BTC is $89,083 (live from CoinGecko). RSI is 29.2 (oversold).
-    Last time RSI was this low (Jan 2023), BTC rallied +15%."
+    Last time RSI was this low (Jan 2023), BTC rallied +15%.
+    Your strategy returned +31.4% in similar conditions (2024 backtest)."
 ```
 
 **Data Source Details:**
@@ -270,6 +272,7 @@ User Question: "What's today's Bitcoin price?"
    - Example: "Find similar market conditions to today"
    - NOT for extracting CSV data (use Pandas for that)
    - Returns: Similar historical scenarios with outcomes
+   - **Full explanation**: See [RAG_MCP_EXPLAINED.md](docs/RAG_MCP_EXPLAINED.md)
 
    **ChromaDB vs FAISS - Understanding the Technology Stack:**
 
