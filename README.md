@@ -137,11 +137,11 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
                     CORE TRADING SYSTEM
 
                          DATA PIPELINE
-                   (Binance API + RAG System)
+            (CSV Historical Data via Pandas + MCP Live Prices)
 
-  • Fetches real-time BTC price and market data (Binance API)
-  • Retrieves historical patterns via RAG for context matching
-    (RAG used for natural language pattern matching, NOT tabular data)
+  • Loads historical BTC data from CSV using Pandas (core trading)
+  • Fetches live prices via MCP CoinGecko API (chat mode)
+  • RAG pattern matching for natural language queries (chat mode only)
   • Manages rate limiting and API calls
 
 
@@ -510,8 +510,9 @@ New to the project? Start here:
 
 ### Data Sources
 - **Binance Testnet**: Real market data with virtual money (paper trading)
-- **RAG System**: Historical data retrieval for context-aware decisions
-- **Real-time Data**: Live price feeds and market indicators
+- **CSV Historical Data**: Pandas-based loading of historical BTC prices (core trading)
+- **MCP CoinGecko API**: Live price data (chat mode only)
+- **RAG System**: Pattern matching for natural language queries (chat mode only)
 - **Rate Limiting**: Leaky bucket algorithm for API protection
 
 ### Notifications & Communication
@@ -567,7 +568,7 @@ btc-intelligent-trader/
     ml/                       # Machine learning models
     natural_language/         # LangGraph agent + Gemini AI
     notifications/            # Telegram, Gmail, Sheets
-    rag/                      # RAG system for historical data
+    rag/                      # RAG pattern matching (natural language)
     risk/                     # Risk management
     strategy/                 # Trading strategies
     utils/                    # Utilities and helpers
@@ -626,7 +627,9 @@ See setup guides in [docs/](docs/) for detailed configuration instructions.
 
 ### Trading & Data
 - **Binance API (CCXT)**: Market data and trade execution
-- **RAG (ChromaDB + Sentence Transformers)**: Historical data retrieval and pattern matching
+- **Pandas**: CSV historical data loading (core trading system)
+- **MCP CoinGecko API**: Live price data (chat mode)
+- **RAG (ChromaDB + Sentence Transformers)**: Pattern matching for natural language queries
 
 ### Natural Language Interface
 - **Google Gemini AI**: LLM for natural language understanding (free tier: 10 RPM, 250 RPD)
