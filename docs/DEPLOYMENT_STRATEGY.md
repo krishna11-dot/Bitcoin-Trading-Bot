@@ -201,7 +201,7 @@ Understand the fundamentals:
 - How to manage processes
 - How to handle restarts
    ↓
-Step 2: Cloud Deployment (AWS/etc)
+Step 2: Cloud Deployment (GCP/Cloud)
    ↓
 Same concepts, different machine
 ```
@@ -232,14 +232,14 @@ Same concepts, different machine
 
 ---
 
-### 2. Cloud Deployment (AWS/Cloud)
+### 2. Cloud Deployment (GCP/Cloud)
 
 **Goal:** Move bot to a server that runs 24/7
 
 **What changes:**
-- Computer = AWS EC2 instance
+- Computer = GCP VM instance (e2-small)
 - Same code, different machine
-- Pay for server time (~$5-20/month)
+- Pay for server time (~$10-20/month, $300 free credit available)
 
 **What stays the same:**
 - Bot logic (identical code)
@@ -466,7 +466,7 @@ logger.error(f"[ERROR] API failed: {error}")
 
 ---
 
-## Cloud Deployment (AWS): Later Stage
+## Cloud Deployment (GCP): Later Stage
 
 ### When to Move to Cloud
 
@@ -480,31 +480,31 @@ logger.error(f"[ERROR] API failed: {error}")
 - Need 99.9% uptime
 - Want professional setup
 - Computer not always on
-- Ready to pay ~$10/month
+- Ready to pay ~$15/month (covered by $300 free credit)
 
 ---
 
-### AWS EC2 Deployment (Future)
+### GCP VM Deployment (Successfully Completed)
 
 **Concept:** Same local setup, different computer
 
 ```
-Your Computer (Local)         AWS EC2 (Cloud)
+Your Computer (Local)         GCP VM (Cloud)
  Python installed    →      Python installed
- Bot code            →      Bot code (upload)
- systemd/NSSM        →      systemd (Linux)
+ Bot code            →      Bot code (git clone)
+ NSSM (Windows)      →      tmux (Linux)
  Runs 24/7           →      Runs 24/7 (cloud)
 ```
 
-**Steps (when ready):**
-1. Launch EC2 instance (Linux server)
+**Steps (completed deployment):**
+1. Launch VM instance (Ubuntu 22.04 LTS)
 2. Install Python
-3. Upload your code
+3. Clone code from GitHub
 4. Install dependencies
-5. Setup systemd (same as local Linux)
+5. Setup tmux for persistent session
 6. Run bot 24/7
 
-**Cost:** ~$5-20/month (t2.micro free tier)
+**Cost:** ~$15/month (e2-small, covered by $300 free credit)
 
 ---
 
@@ -540,20 +540,20 @@ Your Computer (Local)         AWS EC2 (Cloud)
 ### Later (Cloud Deployment)
 
 ```
-1. Create AWS account
-   → Free tier available
+1. Create GCP account
+   → $300 free credit available
 
-2. Launch EC2 instance
-   → t2.micro (free tier)
+2. Launch VM instance
+   → e2-small (Ubuntu 22.04)
 
 3. SSH into instance
    → Remote terminal access
 
 4. Upload code
-   → git clone or scp
+   → git clone from GitHub
 
-5. Setup same as local
-   → systemd, logging, etc.
+5. Setup tmux session
+   → Persistent background process
 
 6. Run bot in cloud
    → 24/7 uptime
@@ -561,7 +561,7 @@ Your Computer (Local)         AWS EC2 (Cloud)
 
 **Time investment:** 1-2 days (after understanding local)
 
-**Cost:** ~$0-10/month (free tier first year)
+**Cost:** ~$15/month (covered by $300 free credit for 20 months)
 
 **Learning outcome:** Professional deployment
 
@@ -569,7 +569,7 @@ Your Computer (Local)         AWS EC2 (Cloud)
 
 ## Key Understanding: The Fundamental
 
-### Your Computer = Server = AWS EC2
+### Your Computer = Server = GCP VM
 
 **All are the same concept:**
 
@@ -585,7 +585,7 @@ Runs 24/7
 
 **Only difference:**
 - Your computer = You own it, free, at home
-- AWS EC2 = Amazon owns it, paid, in cloud
+- GCP VM = Google owns it, paid, in cloud (but $300 free credit)
 
 **Same code. Same concepts. Different machine.**
 
@@ -657,24 +657,24 @@ Runs 24/7
 - Easy to debug
 - Understand concepts
 
-**Stage 2: Cloud (AWS)**
+**Stage 2: Cloud (GCP)**
 - Same concepts
 - Different machine
 - Professional setup
-- Paid but reliable
+- Paid but reliable ($300 free credit available)
 
 ---
 
 ### Key Takeaway
 
 **Quote:**
-> "Once you get that [local deployment] clearly, then you will find it easy to use AWS."
+> "Once you get that [local deployment] clearly, then you will find it easy to use GCP."
 
 **Why this approach works:**
 1. Learn fundamentals locally (free, easy)
 2. Understand: process management, logging, restarts
 3. Apply same concepts to cloud (just different machine)
-4. AWS becomes easy because you know the fundamentals
+4. GCP becomes easy because you know the fundamentals
 
 ---
 
@@ -703,9 +703,9 @@ Runs 24/7
 
 ### Long-term (When Ready)
 
-7. **Learn AWS basics**
-8. **Launch EC2 instance**
-9. **Deploy to cloud**
+7. **Learn GCP basics**
+8. **Launch VM instance**
+9. **Deploy to cloud** (Already completed successfully!)
 10. **Monitor 99.9% uptime**
 
 ---
@@ -1623,11 +1623,12 @@ nssm set BTCTradingBot AppEnvironmentExtra "API_KEY=..."
 nssm start BTCTradingBot
 ```
 
-**Cloud (Linux + systemd):**
+**Cloud (GCP VM + tmux):**
 ```bash
-sudo systemctl enable btc-trader
-Environment="API_KEY=..."
-sudo systemctl start btc-trader
+tmux new -s btc-trader
+python main.py --mode chat
+# Detach: Ctrl+B then D
+# Bot runs 24/7 in background
 ```
 
 **Same Concepts:**
@@ -1658,61 +1659,45 @@ sudo systemctl start btc-trader
 
 ---
 
-### Cloud Deployment Preview (Future)
+### Cloud Deployment (Successfully Completed!)
 
-**AWS EC2 Steps (will be similar to local):**
+**GCP VM Steps (actual deployment completed):**
 
 ```bash
-# 1. Launch EC2 instance (Ubuntu Linux)
-# 2. Connect via SSH
+# 1. Launch GCP VM instance (Ubuntu 22.04 LTS)
+# 2. Connect via SSH from GCP Console
 
-# 3. Install Python and UV
+# 3. Install Python and dependencies
 sudo apt update
-sudo apt install python3 python3-pip
-pip install uv
+sudo apt install python3 python3-pip python3-venv git -y
 
-# 4. Clone your code
-git clone <your-repo>
-cd btc-intelligent-trader
+# 4. Clone your code from GitHub
+git clone https://github.com/krishna11-dot/Bitcoin-Trading-Bot.git
+cd Bitcoin-Trading-Bot
 
-# 5. Setup UV environment (SAME as local)
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
+# 5. Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 
-# 6. Create systemd service (like NSSM, but Linux)
-sudo nano /etc/systemd/system/btc-trader.service
+# 6. Set up environment variables
+nano .env
+# Add your API keys
 
-# Paste:
-[Unit]
-Description=BTC Trading Bot
-After=network.target
+# 7. Start bot in tmux (persistent session)
+tmux new -s btc-trader
+python main.py --mode chat
 
-[Service]
-Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/btc-intelligent-trader
-ExecStart=/home/ubuntu/btc-intelligent-trader/.venv/bin/python main.py --mode live
-Environment="BINANCE_TESTNET_API_KEY=your_key"
-Environment="BINANCE_TESTNET_SECRET_KEY=your_secret"
-Restart=always
-RestartSec=10
+# 8. Detach from tmux (bot keeps running)
+# Press: Ctrl+B then D
 
-[Install]
-WantedBy=multi-user.target
+# 9. Reattach to check bot status
+tmux attach -t btc-trader
 
-# 7. Enable and start (SAME commands as NSSM!)
-sudo systemctl enable btc-trader
-sudo systemctl start btc-trader
-
-# 8. Check status (SAME concept!)
-sudo systemctl status btc-trader
-
-# 9. View logs (SAME concept!)
-sudo journalctl -u btc-trader -f
+# Bot runs 24/7 even after SSH disconnect!
 ```
 
-**You'll recognize everything because you learned it locally!**
+**Successfully deployed and running on GCP!**
 ---
 
 ## Purpose and Success Summary

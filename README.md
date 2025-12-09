@@ -695,7 +695,7 @@ This guide shows how to deploy the bot to Google Cloud Platform using SSH and Li
 
 - GCP account with $300 free credit activated
 - VM instance created (`btc-trader-vm`)
-- GitHub repository: https://github.com/krishna11-dot/Bitcoin-Trading-Bot-System
+- GitHub repository: https://github.com/krishna11-dot/Bitcoin-Trading-Bot
 
 ---
 
@@ -742,10 +742,10 @@ python3 --version  # Should show Python 3.10+ or 3.11+
 cd ~
 
 # Clone repository
-git clone https://github.com/krishna11-dot/Bitcoin-Trading-Bot-System.git
+git clone https://github.com/krishna11-dot/Bitcoin-Trading-Bot.git
 
 # Enter project directory
-cd Bitcoin-Trading-Bot-System
+cd Bitcoin-Trading-Bot
 
 # Verify files
 ls -la
@@ -811,7 +811,7 @@ git push origin main
 
 **On VM (SSH):**
 ```bash
-cd ~/Bitcoin-Trading-Bot-System
+cd ~/Bitcoin-Trading-Bot
 git pull origin main
 ls -lh data/raw/btc_daily_data_2018_to_2025.csv
 ```
@@ -902,7 +902,7 @@ tmux new -s trading-bot
 
 ```bash
 # Navigate to project
-cd ~/Bitcoin-Trading-Bot-System
+cd ~/Bitcoin-Trading-Bot
 
 # Activate virtual environment
 source venv/bin/activate
@@ -944,7 +944,7 @@ tmux kill-session -t trading-bot
 **Restart bot:**
 ```bash
 tmux new -s trading-bot
-cd ~/Bitcoin-Trading-Bot-System
+cd ~/Bitcoin-Trading-Bot
 source venv/bin/activate
 python3 main.py --mode chat
 # Press Ctrl+B, then D
@@ -956,7 +956,7 @@ python3 main.py --mode chat
 tmux kill-session -t trading-bot
 
 # Pull latest changes
-cd ~/Bitcoin-Trading-Bot-System
+cd ~/Bitcoin-Trading-Bot
 git pull origin main
 
 # Reinstall dependencies (if requirements changed)
@@ -1129,4 +1129,4 @@ Start with [QUICKSTART.md](docs/QUICKSTART.md) if you're new to the project.
 - **Primary**: Google Cloud Platform (GCP) - Ubuntu 22.04 VM with tmux
 - **Secondary**: Local Windows (Windows Service via NSSM)
 **Trading**: Analysis & Backtesting (NOT live trading - research tool only)
-**Repository**: https://github.com/krishna11-dot/Bitcoin-Trading-Bot-System
+**Repository**: https://github.com/krishna11-dot/Bitcoin-Trading-Bot

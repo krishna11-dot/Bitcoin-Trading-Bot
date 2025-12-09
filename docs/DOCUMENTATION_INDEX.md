@@ -367,9 +367,9 @@
 **Contains:**
 - Core concept: Computer as CPU entity
 - Two-stage deployment (local → cloud)
-- Process management (NSSM, systemd)
+- Process management (NSSM for Windows, tmux for Linux)
 - Continuous operation strategies
-- AWS deployment overview
+- GCP VM deployment (successfully completed)
 - When to move from local to cloud
 
 **Depth:**  Deployment guide
