@@ -228,6 +228,29 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
    - Predicts 7 days ahead using 7-day rolling window
    - Note: ML is ONE signal - Decision Box combines ML + technical indicators + sentiment for reliability
 
+**How Modules Combine for Profit:**
+
+The Decision Box combines all three modules to make profitable trading decisions:
+
+Example BUY Signal:
+- Module 3 (ML): UP prediction (70% confidence)
+- Module 1 (RSI): 28 (oversold - good entry)
+- Module 2 (Fear & Greed): 35 (fear - buy opportunity)
+→ Decision: BUY - Lower cost basis = Higher profit potential
+
+Example SELL Signal:
+- Module 3 (ML): DOWN prediction (65% confidence)
+- Module 1 (RSI): 72 (overbought - exit signal)
+- Module 1 (MACD): Bearish divergence
+→ Decision: SELL - Take profit before correction
+
+Why combine them?
+- ML predicts DIRECTION (where price is going)
+- Technical Indicators provide TIMING (when to enter/exit)
+- Together: Buy at the RIGHT TIME in the RIGHT DIRECTION = Profit
+
+See [docs/WHY_LINEAR_REGRESSION_RANDOMFOREST.md - How ML + Technical Indicators Work Together for Profit](docs/WHY_LINEAR_REGRESSION_RANDOMFOREST.md#how-ml--technical-indicators-work-together-for-profit) for detailed explanation.
+
 5. **Decision Box** combines all signals to make trading decisions (DCA, Swing, Stop-Loss, Take-Profit)
 
 6. **Execution** executes trades on Binance Testnet
