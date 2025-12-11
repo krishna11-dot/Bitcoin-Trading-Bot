@@ -84,8 +84,9 @@ class BacktestEngine:
         # Initialize decision box (disable Telegram for backtesting to avoid spam, enable Gmail for summary)
         self.decision_box = TradingDecisionBox(config, telegram_enabled=False, gmail_enabled=True)
 
-        # Initialize ML price predictor (v1.0 - simple)
-        print(f"[INFO] Using RandomForest (v1.0 - simplified, 10 features)")
+        # Initialize ML price predictor (v2.0 - Linear Reg + RandomForest hybrid)
+        print(f"[INFO] Using Hybrid Model (v2.0 - Linear Reg + RandomForest, 5 features, 16 aggregated)")
+        print(f"[INFO] Features: lr_trend, lr_residual, rolling_std, volume_spike, high_low_range")
         print(f"[INFO] Fear & Greed confidence multiplier: ENABLED")
         self.price_predictor = BitcoinPricePredictor(
             window_size=7,

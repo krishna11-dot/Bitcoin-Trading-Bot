@@ -512,6 +512,56 @@ class BitcoinFeatureEngineer:
         lower_band = sma_20 - (2 * std_20)
         df_past['bb_width'] = (upper_band - lower_band) / sma_20
 
+        #
+        # CATEGORY 12: LINEAR REGRESSION FEATURES (2) - NEW v2.0 (OPTIMIZED)
+        #
+        # Purpose: Capture linear trend for extrapolation
+        # Solves: RandomForest extrapolation problem at new price ranges
+
+        # Optimized Linear Regression using vectorized operations
+        window_size = 7  # Same as prediction window
+
+        # Pre-compute X matrix (same for all windows)
+        X_lr = np.arange(window_size).reshape(-1, 1)
+
+        # Initialize arrays
+        lr_trend = []
+        lr_residual = []
+
+        # Vectorized calculation for each window
+        prices = df_past['Price'].values
+
+        for i in range(window_size, len(prices)):
+            # Get 7-day window
+            window_prices = prices[i-window_size:i]
+
+            # Fast linear regression using closed-form solution
+            # y = mx + b, solve using least squares
+            x_mean = (window_size - 1) / 2
+            y_mean = window_prices.mean()
+
+            numerator = np.sum((np.arange(window_size) - x_mean) * (window_prices - y_mean))
+            denominator = np.sum((np.arange(window_size) - x_mean) ** 2)
+
+            slope = numerator / denominator if denominator != 0 else 0
+            intercept = y_mean - slope * x_mean
+
+            # Feature 25: Linear trend (extrapolated to next step)
+            trend = slope * window_size + intercept
+            lr_trend.append(trend)
+
+            # Feature 26: Residual (actual vs predicted)
+            predicted_current = slope * (window_size - 1) + intercept
+            residual = window_prices[-1] - predicted_current
+            lr_residual.append(residual)
+
+        # Assign to dataframe (pad with NaN for first window_size rows)
+        df_past['lr_trend'] = np.nan
+        df_past['lr_residual'] = np.nan
+
+        df_past.iloc[window_size:, df_past.columns.get_loc('lr_trend')] = lr_trend
+        df_past.iloc[window_size:, df_past.columns.get_loc('lr_residual')] = lr_residual
+
         # Drop NaN rows (created by rolling windows)
         df_past = df_past.dropna()
 
@@ -600,18 +650,16 @@ class DirectionClassifier:
         self.feature_engineer = BitcoinFeatureEngineer(enable_blockchain=False, use_cached_blockchain=True)
         self.is_trained = False
 
-        # SIMPLIFIED: 10 essential features (v1.0 - keep it simple)
+        # OPTION C: Linear Reg + 5 non-redundant features (v2.0)
         self.feature_cols = [
-            # Volatility (2)
-            'rolling_std', 'high_low_range',
-            # Trend & Momentum (4)
-            'price_change_pct', 'sma_ratio', 'roc_7d', 'momentum_oscillator',
+            # Linear Regression (2 - NEW - handles extrapolation)
+            'lr_trend', 'lr_residual',
+            # Volatility (1)
+            'rolling_std',
             # Volume (1)
             'volume_spike',
-            # Market Structure (2)
-            'higher_highs', 'lower_lows',
-            # Moving Average (1)
-            'sma_30'
+            # Intraday Volatility (1)
+            'high_low_range'
         ]
 
     def _create_rolling_windows_for_classification(
@@ -804,18 +852,16 @@ class BitcoinPricePredictor:
         self.horizon = horizon
         self.use_direction_classifier = use_direction_classifier
 
-        # SIMPLIFIED: 10 essential features (v1.0)
+        # OPTION C: Linear Reg + 5 non-redundant features (v2.0)
         self.feature_cols = [
-            # Volatility (2)
-            'rolling_std', 'high_low_range',
-            # Trend & Momentum (4)
-            'price_change_pct', 'sma_ratio', 'roc_7d', 'momentum_oscillator',
+            # Linear Regression (2 - NEW - handles extrapolation)
+            'lr_trend', 'lr_residual',
+            # Volatility (1)
+            'rolling_std',
             # Volume (1)
             'volume_spike',
-            # Market Structure (2)
-            'higher_highs', 'lower_lows',
-            # Moving Average (1)
-            'sma_30'
+            # Intraday Volatility (1)
+            'high_low_range'
         ]
 
         # Single RandomForest model (v1.0 - keep it simple)

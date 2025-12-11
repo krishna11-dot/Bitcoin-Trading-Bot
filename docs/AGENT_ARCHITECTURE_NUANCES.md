@@ -1,6 +1,6 @@
 # Agent Architecture Nuances - LangGraph Implementation
 
-> **Key Learning**: "When we take on people, we want to know that if things break, can you figure out why it's breaking? Because if you can't do that, there is no point in knowing how to solve a problem." - Swarnabha Ghosh
+> **Key Learning**: "When we take on people, we want to know that if things break, can you figure out why it's breaking? Because if you can't do that, there is no point in knowing how to solve a problem."
 
 This document captures the critical nuances learned from building a production-grade LangGraph agent for the Bitcoin trading system.
 

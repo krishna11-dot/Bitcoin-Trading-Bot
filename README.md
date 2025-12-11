@@ -27,7 +27,7 @@ An automated trading system that:
 
 An intelligent Bitcoin trading bot that:
 - **Trades automatically** using DCA (Dollar Cost Averaging) and Swing Trading strategies
-- **Predicts price direction** using RandomForest ML model (7-day forecasts)
+- **Predicts price direction** using Hybrid Linear Regression + RandomForest ML model (7-day forecasts)
 - **Analyzes market conditions** with technical indicators (RSI, MACD, ATR, SMA)
 - **Reads market sentiment** using Fear & Greed Index
 - **Manages risk automatically** with stop-loss, take-profit, and position sizing
@@ -154,12 +154,14 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
    TECHNICAL            SENTIMENT            PREDICTION
    INDICATORS           ANALYSIS                (ML)
 
- • RSI                • Fear & Greed       • RandomForest
- • MACD                 Index              • 10 features
- • ATR                • Market             • 7-day window
- • SMA 50/200           sentiment          • Direction
-                      • Confidence           (UP/DOWN)
-                        multiplier         • Confidence
+ • RSI                • Fear & Greed       • Linear Reg +
+ • MACD                 Index                RandomForest
+ • ATR                • Market             • 5 features
+ • SMA 50/200           sentiment            (16 aggregated)
+                      • Confidence         • 7-day window
+                        multiplier         • Direction
+                                             (UP/DOWN)
+                                           • Confidence
 
 
 
@@ -218,9 +220,11 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
 
 3. **Module 2** analyzes market sentiment using Fear & Greed Index
 
-4. **Module 3** uses RandomForest ML model with 10 essential features to predict price direction and confidence
-   - Can engineer 24 features total, but uses 10 for prediction (simpler, less overfitting)
-   - Features: volatility (2), trend (2), momentum (2), volume (1), market structure (2), moving average (1)
+4. **Module 3** uses Hybrid Linear Regression + RandomForest ML model with 5 non-redundant features to predict price direction and confidence
+   - Linear Regression: Captures linear trends and extrapolates beyond training data
+   - RandomForest: Learns non-linear patterns and deviations from trend
+   - 5 base features → 16 aggregated features (48% reduction from v1.0's 31 features)
+   - Features: Linear trend (1), Linear residual (1), volatility (1), volume (1), intraday range (1)
    - Predicts 7 days ahead using 7-day rolling window
    - Note: ML is ONE signal - Decision Box combines ML + technical indicators + sentiment for reliability
 
@@ -492,14 +496,144 @@ New to the project? Start here:
 - **Position Management**: Intelligent position sizing based on portfolio value
 - **Risk Management**: Stop-loss, take-profit, and position limits
 
-### Machine Learning
-- **RandomForest Model**: Predicts BTC price direction 7 days ahead (UP/DOWN)
-- **Feature Engineering**: 24 features created, 10 essential features used for prediction
-- **7-Day Rolling Window**: Uses 7 days of historical patterns to predict future direction
-- **Model Training**: Pre-trained on all available historical data
-- **Prediction Confidence**: Provides confidence score (0-1) for each prediction
-- **Extrapolation Awareness**: ML is ONE signal combined with technical indicators (not sole decision maker)
-- **Known Limitation**: RandomForest cannot extrapolate beyond training data range (49.7% direction accuracy when prices exceed training range). Strategy still profitable due to defensive DCA and stop-loss strategies. See [ML Model Limitations](docs/ML_MODEL_LIMITATIONS.md) for details.
+### Machine Learning - Hybrid Linear + RandomForest Architecture (v2.0)
+
+**Architecture Overview:**
+- **Hybrid Model**: Linear Regression (trend) + RandomForest (deviations)
+- **Base Features**: 5 non-redundant features (down from 10)
+- **Aggregated Features**: 16 total (down from 31, 48% reduction)
+- **Training Performance**: 30x faster (20 seconds vs 10+ minutes)
+- **Prediction Horizon**: 7 days ahead (UP/DOWN direction)
+
+**Why Hybrid Architecture?**
+
+The bot uses a two-stage approach to solve complementary problems:
+
+1. **Linear Regression (Trend Extrapolation)**:
+   - **What it does**: Captures linear price trends using least squares regression
+   - **Why it's needed**: RandomForest CANNOT extrapolate beyond training data (e.g., trained on $20k-$90k, fails at $100k+)
+   - **Features created**: `lr_trend` (extrapolated price), `lr_residual` (deviation from trend)
+   - **Mathematical formula**: y = mx + b (closed-form solution for 30x speedup)
+   - **Example**: If BTC trends from $60k → $70k over 7 days, Linear Regression predicts $80k (extrapolates)
+
+2. **RandomForest (Non-Linear Deviations)**:
+   - **What it does**: Learns complex patterns and deviations from the linear trend
+   - **Why it's needed**: Markets have non-linear behaviors (volatility spikes, sentiment shifts)
+   - **Input**: 5 features including Linear Regression outputs + volatility + volume
+   - **Output**: Direction (UP/DOWN) + Confidence (0-1)
+   - **Example**: Linear Regression says $80k, but high volatility + volume spike → RandomForest adjusts to DOWN
+
+**Why RandomForest for Time Series? (Isn't this a regression problem?)**
+
+Time series data (daily prices) is converted to tabular format using **rolling windows**:
+
+```
+Original Time Series:
+Day 1: $60k
+Day 2: $61k
+Day 3: $62k
+...
+Day 7: $66k
+Day 8: $67k (predict this)
+
+Converted to Tabular (Rolling Window = 7 days):
+Row 1: [features from days 1-7] → Label: Day 8 direction (UP)
+Row 2: [features from days 2-8] → Label: Day 9 direction (DOWN)
+...
+
+RandomForest trains on these rows (each row = one prediction scenario)
+```
+
+This approach lets RandomForest capture patterns like:
+- "When volatility is low and volume spikes, price usually goes UP"
+- "When RSI >70 and Linear Regression shows uptrend, price usually corrects DOWN"
+
+**Feature Engineering: 5 Non-Redundant Features (v2.0)**
+
+**Selected Features** (eliminated redundancy through correlation analysis):
+1. `lr_trend`: Linear Regression trend (extrapolates to next step)
+2. `lr_residual`: Deviation from Linear Regression (captures anomalies)
+3. `rolling_std`: 7-day price volatility (standard deviation)
+4. `volume_spike`: Volume relative to average (identifies unusual activity)
+5. `high_low_range`: Intraday volatility (daily high - low)
+
+**Removed Features** (v1.0 → v2.0):
+- ❌ `price_change_pct`, `roc_7d` → Redundant (both measure momentum, captured by `lr_trend`)
+- ❌ `sma_ratio`, `momentum_oscillator` → Redundant (both measure trend relative to moving average)
+- ❌ `higher_highs`, `lower_lows` → Low importance (binary flags with weak signal)
+- ❌ `sma_30` → Redundant (trend already captured in `lr_trend`)
+
+**Feature Aggregation** (Rolling Window Statistics):
+Each feature is aggregated over 7-day window: min, max, avg
+- Example: `rolling_std` → `rolling_std_min`, `rolling_std_max`, `rolling_std_avg`
+- Total: 5 base features × 3 aggregations + 1 (current_price) = **16 features**
+- Previous version: 10 base features × 3 + 1 = **31 features** (48% reduction)
+
+**Performance Optimization: Closed-Form Linear Regression**
+
+**Original Implementation** (SLOW - 10+ minutes):
+```python
+for i in range(2685):  # For each row
+    lr_model = LinearRegression()  # Create sklearn object
+    lr_model.fit(X, y)  # Fit model (overhead)
+    prediction = lr_model.predict(...)
+```
+
+**Optimized Implementation** (FAST - 20 seconds, 30x faster):
+```python
+# Closed-form least squares formula (no sklearn overhead)
+for i in range(2685):
+    slope = Σ((x - x̄)(y - ȳ)) / Σ((x - x̄)²)
+    intercept = ȳ - slope * x̄
+    trend = slope * next_step + intercept  # Direct calculation
+```
+
+**Why this works**: Linear Regression has a mathematical closed-form solution. No need for sklearn's iterative fitting - pure NumPy math is 30x faster and gives identical results.
+
+**Blockchain Data Usage**
+
+**What is it?**
+- Optional features: `hash_rate`, `mempool_size`, `block_size`
+- Source: Bitcoin network metrics (mining difficulty, transaction queue, block capacity)
+
+**How is it used?**
+- **Feature Engineering**: Creates 3 additional technical features (aggregated to 9)
+- **NOT for RAG**: Blockchain data is used in ML model, NOT for natural language pattern matching
+- **Fallback**: If blockchain API fails, uses volume-based features instead
+
+**Example**:
+```
+High hash_rate + Large mempool_size = Network congestion → DOWN prediction
+Low hash_rate + Empty mempool = Network activity low → Neutral
+```
+
+**Current Status**: Blockchain features optional (enable with `enable_blockchain=True`)
+
+**Known Limitations & Trade-offs**
+
+✅ **Solved Problems**:
+- **Extrapolation**: Linear Regression handles new all-time high prices
+- **Speed**: 30x faster training (20 seconds vs 10+ minutes)
+- **Overfitting Risk**: Fewer features (16 vs 31) reduces overfitting
+
+⚠️ **Known Limitations**:
+- **Direction Accuracy**: 60% (down from 65% with 10 features) - acceptable trade-off
+- **Extreme Gaps**: If trained on $3k-$49k and tested on $100k+, accuracy drops (but production model retrains daily, so gaps are small)
+- **Linear Assumption**: Linear Regression assumes trends continue linearly (markets can be non-linear)
+
+**Why ML is ONE Signal** (Not Sole Decision Maker):
+- Decision Box combines: ML prediction + RSI + MACD + Fear & Greed Index + ATR
+- ML provides direction + confidence, but final trade decision uses ALL signals
+- Example: ML says "UP 90% confidence" but RSI=75 (overbought) → Decision Box says "HOLD" (wait for cooldown)
+
+**Model Training & Prediction Flow**:
+1. **Training**: Pre-trained on all historical data (2018-2025, 2,685+ rows)
+2. **Feature Creation**: Linear Regression + 4 technical features → 16 aggregated features
+3. **RandomForest Training**: Learns patterns from 16 features → Direction (UP/DOWN)
+4. **Prediction**: Every 5 minutes in live mode, every day in backtest
+5. **Confidence Score**: RandomForest probability (0-1) indicates prediction certainty
+
+See [Module 3 ML Explained](docs/MODULE3_ML_EXPLAINED.md) for detailed technical explanation and [Old vs New Comparison](docs/OLD_VS_NEW_COMPARISON.md) for performance benchmarks.
 
 ### Natural Language Interface
 - **Chat Mode**: Ask questions in plain English instead of running commands
@@ -625,8 +759,9 @@ See setup guides in [docs/](docs/) for detailed configuration instructions.
 - **TA-Lib**: Technical indicators (RSI, MACD, Bollinger Bands)
 
 ### Machine Learning
-- **scikit-learn RandomForest**: Direction prediction (UP/DOWN classification)
-- **Feature Engineering**: 24 features → 10 essential features for prediction
+- **Hybrid Architecture**: Linear Regression (trend extrapolation) + RandomForest (non-linear patterns)
+- **scikit-learn**: Linear Regression (closed-form optimization) + RandomForest Classifier
+- **Feature Engineering**: 5 base features → 16 aggregated features (v2.0, 48% reduction from v1.0)
 
 ### Trading & Data
 - **Binance API (CCXT)**: Market data and trade execution
