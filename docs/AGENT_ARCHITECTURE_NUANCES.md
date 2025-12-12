@@ -105,7 +105,7 @@ def _validate_node(self, state: AgentState) -> AgentState:
         state["understanding"]
     )
     # Pydantic checks:
-    # - Is it one of 5 allowed intents?
+    # - Is it one of 6 allowed intents?
     # - Is confidence score valid (0.0-1.0)?
     # - Are parameters properly formatted?
 
@@ -113,7 +113,7 @@ def _validate_node(self, state: AgentState) -> AgentState:
 ```
 
 **Validation Layers**:
-1. **Schema validation** (Pydantic): Intent must be one of 5 allowed values
+1. **Schema validation** (Pydantic): Intent must be one of 6 allowed values
 2. **Confidence threshold**: Reject if confidence < 0.5
 3. **Parameter validation**: Ensure parameters match expected format
 
@@ -125,6 +125,204 @@ def _validate_node(self, state: AgentState) -> AgentState:
 - Audit trail (know exactly what was rejected and why)
 
 **Implementation**: [src/natural_language/guardrails.py](src/natural_language/guardrails.py)
+
+---
+
+### 3.1. Understanding Intents (Deep Dive)
+
+**What Are Intents?**
+
+Intents are **categories of user requests**. Think of them as folders organizing what the user wants.
+
+**The 6 Allowed Intents**:
+
+| Intent | User Wants | Example Questions |
+|--------|-----------|-------------------|
+| `check_market` | Current market data | "What's BTC price?", "Show me RSI", "Fear & Greed?" |
+| `check_portfolio` | Their positions | "Show my holdings", "What's my balance?" |
+| `run_trade` | Execute a trade | "Run a trade cycle", "Execute buy order" |
+| `get_decision` | Recommendation | "Should I buy?", "What do you recommend?" |
+| `analyze_backtest` | Past results | "How many trades?", "What was the return?", "Show metrics" |
+| `help` | Help/explanation | "What is DCA?", "How does this work?" |
+
+**Key Insight**: That's ALL your bot can do. Only 6 actions. Everything else gets mapped to one of these.
+
+---
+
+#### Where Intents Are Defined (3 Locations)
+
+**Location 1: Validation Set** ([guardrails.py:67-74](src/natural_language/guardrails.py#L67-L74))
+
+```python
+VALID_INTENTS = {
+    "check_market",
+    "check_portfolio",
+    "run_trade",
+    "get_decision",
+    "analyze_backtest",
+    "help"
+}
+```
+
+**Purpose**: Hard-coded source of truth for validation
+
+---
+
+**Location 2: Keyword Fallback** ([guardrails.py:77-109](src/natural_language/guardrails.py#L77-L109))
+
+```python
+INTENT_KEYWORDS = {
+    "check_market": ["market", "price", "btc", "rsi", "atr"],
+    "analyze_backtest": ["backtest", "result", "metrics", "accuracy", "trades"],
+    "help": ["help", "what", "how", "explain"],
+    # ... etc for all 6 intents
+}
+```
+
+**Purpose**: Fuzzy matching when LLM fails or returns plain text instead of JSON
+
+---
+
+**Location 3: LLM Prompt** ([agent.py:302-308](src/natural_language/agent.py#L302-L308))
+
+```python
+prompt = """
+Return ONLY valid JSON:
+{
+    "intent": "check_market" | "check_portfolio" | "run_trade" |
+              "get_decision" | "analyze_backtest" | "help",
+    "confidence": 0.0-1.0
+}
+"""
+```
+
+**Purpose**: Instruct the LLM on available options
+
+---
+
+#### Defense-in-Depth Strategy
+
+**Why 3 locations?** Because LLMs are unreliable:
+
+```
+Layer 1: LLM Prompt
+  ↓ "Hey LLM, only choose from these 6 intents"
+  ↓ LLM might return: {"intent": "check_btc_price"} ❌ Invalid!
+  ↓
+Layer 2: Pydantic Validation
+  ↓ "Is this one of the 6 allowed?"
+  ↓ NO → Trigger fuzzy matching
+  ↓
+Layer 3: Keyword Matching
+  ↓ "check_btc_price" contains "price" → "check_market" ✅
+  ↓
+Layer 4: Execution Router
+  ↓ Call _check_market() function
+```
+
+**This handles**:
+- LLM typos (`"chek_market"`)
+- Invalid intents (`"hack_system"`)
+- Plain text responses (`"show me the price"`)
+- Malformed JSON (`{intent: check_market}` - missing quotes)
+
+---
+
+#### Complete Intent Flow (Example)
+
+**User**: "How many trades did I make?"
+
+```
+┌─────────────────────────────────────────┐
+│ Step 1: Understand (LLM)                │
+│ [agent.py:285-339]                      │
+│                                         │
+│ LLM Output:                             │
+│ {"intent": "analyze_backtest",          │
+│  "confidence": 0.9}                     │
+└────────┬────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────┐
+│ Step 2: Validate (Guardrails)           │
+│ [guardrails.py:112-189]                 │
+│                                         │
+│ Check: Is "analyze_backtest" in         │
+│        VALID_INTENTS?                   │
+│ ✅ YES                                   │
+│                                         │
+│ Return: TradingIntent(                  │
+│   intent="analyze_backtest",            │
+│   parameters={},                        │
+│   confidence=0.9                        │
+│ )                                       │
+└────────┬────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────┐
+│ Step 3: Execute (Your Code)             │
+│ [agent.py:349]                          │
+│                                         │
+│ if intent == "analyze_backtest":        │
+│     result = self._analyze_backtest()   │
+│                                         │
+│ Returns: {                              │
+│   "num_trades": 47,                     │
+│   "win_rate": 0.55,                     │
+│   "total_return": 0.0583                │
+│ }                                       │
+└────────┬────────────────────────────────┘
+         ↓
+┌─────────────────────────────────────────┐
+│ Step 4: Respond (LLM)                   │
+│ [agent.py:373-420]                      │
+│                                         │
+│ Format as natural language:             │
+│ "You made 47 trades with a 55% win      │
+│  rate and 5.83% return."                │
+└─────────────────────────────────────────┘
+```
+
+---
+
+#### Fuzzy Matching Example
+
+**User**: "show me the price"
+
+```python
+# LLM might fail to return valid JSON, just returns plain text
+llm_output = "show me the price"
+
+# Guardrails fallback to keyword matching
+# Check each intent's keywords:
+# - "check_market": ["price"] ✅ MATCH (score: 1)
+# - "check_portfolio": ["show", "me"] (score: 0)
+# - "help": ["?"] (score: 0)
+
+# Result: "check_market" (highest score)
+intent = "check_market"
+```
+
+---
+
+#### Interview Questions
+
+**Q1: "Why are intents defined in 3 different places?"**
+
+**Answer:**
+> "It's a defense-in-depth strategy. The LLM prompt instructs what options exist, Pydantic validates the LLM's output against the allowed set, and keyword matching provides a fallback when the LLM returns plain text instead of JSON. This ensures the system gracefully handles LLM failures while maintaining strict control over allowed actions."
+
+---
+
+**Q2: "What happens if the LLM returns an invalid intent?"**
+
+**Answer:**
+> "The Pydantic validator checks if the intent is in VALID_INTENTS. If not, fuzzy matching kicks in - it scores each valid intent based on keyword overlap and selects the highest match. If no keywords match at all, it defaults to 'help'. This ensures the system never executes an invalid command, even if the LLM hallucinates."
+
+---
+
+**Q3: "How would you add a new intent?"**
+
+**Answer:**
+> "I'd need to update 3 locations: (1) Add to VALID_INTENTS set in guardrails.py, (2) Add keywords to INTENT_KEYWORDS for fuzzy matching, (3) Update the LLM prompt to include the new option, and (4) Add a new handler function in agent.py's _execute_tool method. The multi-location design ensures all validation and routing layers stay synchronized."
 
 ---
 
