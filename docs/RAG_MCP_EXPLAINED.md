@@ -62,12 +62,31 @@ current_market = {
 **File**: `src/rag/rag_system.py`
 
 **Technology**:
-- ChromaDB: Vector database
-- Sentence Transformers: Text embeddings (all-MiniLM-L6-v2)
-- Cosine similarity: Pattern matching
+- ChromaDB: Vector database for storing embeddings
+- Sentence Transformers: Converts text to 384-dimensional semantic embeddings (all-MiniLM-L6-v2 model)
+- Distance-based similarity: Pattern matching in 384D vector space
+
+**How It Works (Behind the Scenes)**:
+
+1. **Text → Embedding** (Storage):
+   ```python
+   narrative = "BTC at $70K with RSI 45, consolidating"
+   embedding = SentenceTransformer.encode(narrative)
+   # Result: [0.12, -0.45, 0.78, ... 384 numbers]
+   ```
+
+2. **Semantic Matching** (Search):
+   - Multi-dimensional semantic matching (384D vector space) based on narrative meaning
+   - Numbers (price/RSI/fear_greed) influence the embedding but aren't separate weighted dimensions
+   - Similarity = distance between query vector and stored vectors in 384D space
+
+3. **Why This Works**:
+   - "consolidating" ≈ "sideways movement" (same semantic meaning)
+   - "$70K resistance" ≈ "$95K near ATH" (similar market structure)
+   - Captures meaning, not just keyword overlap
 
 **Success Criteria**:
-- Similarity score > 0.5 (50% match)
+- Similarity score > 0.5 (50% match) - configurable threshold
 - Top 3 most similar patterns returned
 - Fast retrieval (< 100ms)
 
@@ -335,3 +354,84 @@ Graceful fallback ensures bot always works!
 - Strategy validation
 
 Both systems work independently but complement each other perfectly for natural language market analysis.
+
+---
+
+## Interview Questions & Answers
+
+### Q1: "How does your RAG system work?"
+
+**Answer**:
+> "My RAG system uses SentenceTransformer to convert market narratives into 384-dimensional semantic embeddings. These embeddings are stored in ChromaDB, a vector database. When querying for similar patterns, the system creates an embedding for the current market conditions and finds the closest matches using distance metrics in 384D vector space. This allows semantic matching - finding patterns with similar meaning, not just similar keywords."
+
+**Key Points**:
+- Text → 384D embedding (SentenceTransformer)
+- Stored in ChromaDB vector database
+- Similarity = distance in 384D space
+- Semantic matching (meaning-based, not keyword-based)
+
+---
+
+### Q2: "What's the difference between your RAG and keyword search?"
+
+**Answer**:
+> "Keyword search would only match exact words, so 'consolidating near $70K' wouldn't match 'sideways movement around $95K' even though they describe similar market structures. My RAG uses semantic embeddings, so it understands that these narratives have similar *meaning* and would match them appropriately."
+
+**Examples**:
+- ✅ RAG matches: "consolidating" ≈ "sideways movement"
+- ✅ RAG matches: "$70K resistance" ≈ "$95K near ATH"
+- ❌ Keyword search: Would miss these matches
+
+---
+
+### Q3: "How do the numbers (price, RSI, fear_greed) factor into matching?"
+
+**Answer**:
+> "The numbers are converted to text as part of the narrative (e.g., 'BTC Price: $98,000, RSI: 45.1'), then the entire narrative is embedded into 384 dimensions. So the numbers DO influence the similarity matching, but indirectly through their semantic representation, not as separate weighted dimensions for numeric filtering."
+
+**Nuance**:
+- Numbers influence embedding (part of text)
+- NOT separate dimensions with weights
+- NOT numeric filtering (e.g., "price within 10%")
+- Semantic meaning of the full narrative drives similarity
+
+---
+
+### Q4: "What's the minimum similarity threshold and why?"
+
+**Answer**:
+> "I use a minimum similarity threshold of 0.5 (50% match). This filters out patterns that are too dissimilar while still allowing some variance. The threshold is configurable - lower values (0.3-0.4) return more patterns but with lower relevance, higher values (0.7-0.8) return only very similar patterns but might miss useful context."
+
+**Code Reference**:
+- Default: `min_similarity=0.5` ([src/rag/rag_system.py:226](src/rag/rag_system.py#L226))
+- Agent usage: `min_similarity=0.5` ([src/natural_language/agent.py:475](src/natural_language/agent.py#L475))
+
+---
+
+### Q5: "Why 384 dimensions specifically?"
+
+**Answer**:
+> "That's determined by the all-MiniLM-L6-v2 model I'm using. It's a balance between speed and quality - smaller models (like 128D) are faster but capture less semantic nuance, while larger models (like BERT's 768D) are more accurate but slower. The 384D model provides good semantic understanding while keeping retrieval fast (< 100ms)."
+
+---
+
+### Q6: "How would you debug if RAG returns irrelevant patterns?"
+
+**Answer**:
+> "First, I'd check the similarity scores - if they're low (< 0.6), it might indicate not enough training data. Second, I'd examine the narrative text being embedded to ensure it's descriptive enough. Third, I could adjust the minimum similarity threshold or experiment with different embedding models. I'd also check if the stored patterns have sufficiently diverse and detailed narratives."
+
+**Debug Steps**:
+1. Check similarity scores
+2. Examine narrative quality
+3. Adjust `min_similarity` threshold
+4. Test with `python src/rag/rag_system.py`
+5. Add more diverse patterns to database
+
+---
+
+### Q7: "Could you use the numeric values (price, RSI) for weighted multi-dimensional matching?"
+
+**Answer**:
+> "Yes, that would be a potential enhancement. Currently, the numbers are embedded as text, but I could add a hybrid approach where I calculate a weighted score: 60% semantic similarity from embeddings + 40% numeric proximity (e.g., price within 10%, RSI within 15 points). This would find patterns that are both semantically similar AND numerically close. However, the current approach works well because the semantic embedding already captures the numeric context."
+
+**This shows**: You understand the current implementation AND can suggest improvements.
