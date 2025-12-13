@@ -1,8 +1,8 @@
 # BTC Intelligent Trader - Documentation Index
 
-**Purpose:** Master index for all documentation (26 files organized by purpose)
+**Purpose:** Master index for all documentation (30 files organized by purpose)
 
-**Last Updated:** 2025-11-30
+**Last Updated:** 2025-12-13
 
 ---
 
@@ -338,9 +338,82 @@
 
 ---
 
+### 21. [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md) - Complete ML Interview Q&A
+**Purpose:** Interview-ready explanations with code evidence
+**Read time:** 60 minutes
+**Read if:** Preparing for ML/data science interviews
+
+**Contains:**
+- Q1-Q10: ML Model questions (hybrid Linear Regression + RandomForest)
+- Q11-Q14: Architectural decision questions (NEW - added 2025-12-13)
+- Q11: RAG refactoring story (responding to mentor feedback)
+- Q12: Feature selection honesty (reasoning vs statistical methods)
+- Q13: HTTP API vs MCP protocol decision
+- Q14: RAG architecture deep dive (ChromaDB + SentenceTransformer)
+- Complete answers with code line references
+- "Before/after" examples showing learning process
+- Interview preparation checklist
+
+**Depth:**  Interview preparation (practical answers)
+
+---
+
+##  RAG & Data Pipeline
+
+### 22. [RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md](RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md) - RAG Technical Guide
+**Purpose:** Complete technical documentation of RAG system refactoring
+**Read time:** 25 minutes
+**Read if:** Understanding RAG implementation or working on RAG system
+
+**Contains:**
+- Why RAG refactoring was needed (Swarnabha's feedback)
+- Before/After comparison (auto-generated narratives → coin descriptions)
+- Technical architecture (CoinGecko API → SentenceTransformer → ChromaDB)
+- Where SentenceTransformer fits (384D embeddings)
+- Where ChromaDB fits (vector storage with L2 distance)
+- Complete code flow with line references
+- Semantic search vs keyword matching explanation
+- Multi-dimensional vs multi-model clarification
+
+**Depth:**  Technical (developer reference)
+
+---
+
+### 23. [QUICK_START_RAG_COIN_DESCRIPTIONS.md](QUICK_START_RAG_COIN_DESCRIPTIONS.md) - RAG Quick Start
+**Purpose:** Get RAG system running in 5 minutes
+**Read time:** 5 minutes
+**Read if:** Want to test RAG functionality quickly
+
+**Contains:**
+- Installation commands (ChromaDB, sentence-transformers)
+- Initialization script usage
+- Quick test commands
+- Verification steps
+- Expected output examples
+
+**Depth:**  Quick start guide
+
+---
+
+### 24. [WHY_LINEAR_REGRESSION_RANDOMFOREST.md](WHY_LINEAR_REGRESSION_RANDOMFOREST.md) - ML Architecture Explanation
+**Purpose:** Deep dive into hybrid ML approach and profit generation
+**Read time:** 30 minutes
+**Read if:** Understanding ML model design decisions
+
+**Contains:**
+- Why hybrid approach (extrapolation problem)
+- How Linear Regression + RandomForest work together
+- Profit explanation with examples
+- Version history (v1.0 → v2.0 evolution)
+- Interview Q&A about model choices
+
+**Depth:**  Technical explanation with business context
+
+---
+
 ## Concepts & Best Practices
 
-### 21. [LLM_VS_TEMPLATE_NUANCES.md](LLM_VS_TEMPLATE_NUANCES.md) - When to Use LLM vs Template
+### 25. [LLM_VS_TEMPLATE_NUANCES.md](LLM_VS_TEMPLATE_NUANCES.md) - When to Use LLM vs Template
 **Purpose:** Understanding when to use LLM vs traditional code
 **Read time:** 15 minutes
 **Read if:** Want to understand LLM usage principles
@@ -359,7 +432,7 @@
 
 ##  Setup & Configuration
 
-### 22. [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) - Local First, Cloud Later
+### 26. [DEPLOYMENT_STRATEGY.md](DEPLOYMENT_STRATEGY.md) - Local First, Cloud Later
 **Purpose:** Understanding deployment fundamentals
 **Read time:** 20 minutes
 **Read if:** Want to run bot 24/7 or deploy to cloud
@@ -376,7 +449,7 @@
 
 ---
 
-### 24. [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md) - Google Sheets API
+### 27. [GOOGLE_SHEETS_SETUP.md](GOOGLE_SHEETS_SETUP.md) - Google Sheets API
 **Purpose:** Set up Google Sheets configuration
 **Read time:** 20 minutes
 **Read if:** Setting up config management
@@ -391,7 +464,7 @@
 
 ---
 
-### 25. [TESTING_GUIDE.md](TESTING_GUIDE.md) - Testing Procedures
+### 28. [TESTING_GUIDE.md](TESTING_GUIDE.md) - Testing Procedures
 **Purpose:** How to test the system
 **Read time:** 15 minutes
 **Read if:** Running tests or verifying changes
@@ -406,9 +479,24 @@
 
 ---
 
+### 29. [RAG_MCP_EXPLAINED.md](RAG_MCP_EXPLAINED.md) - RAG & MCP Concepts (Legacy)
+**Purpose:** Original RAG explanation (now superseded by newer docs)
+**Read time:** 20 minutes
+**Read if:** Historical reference or understanding old RAG approach
+
+**Contains:**
+- Original RAG explanation with auto-generated narratives (OLD approach)
+- MCP (Model Context Protocol) explanation
+- Note: This doc represents the OLD approach before refactoring
+- See RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md for CURRENT approach
+
+**Depth:**  Historical reference (legacy documentation)
+
+---
+
 ## This Documentation File
 
-### 26. DOCUMENTATION_INDEX.md (This File)
+### 30. DOCUMENTATION_INDEX.md (This File)
 **Purpose:** Master index for all documentation
 **Read time:** 10 minutes
 **Read if:** Lost or need to find specific information
@@ -483,6 +571,41 @@ Total: 7-57 minutes (depending on quick start vs detailed guides)
 3. MULTI_PERIOD_ANALYSIS.md (15 min) - current performance
 4. ARCHITECTURE_GUIDE.md (30 min) - where to change
 Total: 77 minutes to plan v2.0
+```
+
+---
+
+### Path 6: RAG System Understanding (NEW - 2025-12-13)
+```
+Quick Start (Testing):
+1. QUICK_START_RAG_COIN_DESCRIPTIONS.md (5 min)
+
+Deep Dive (Understanding):
+2. RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md (25 min)
+3. WHY_LINEAR_REGRESSION_RANDOMFOREST.md (30 min) - ML context
+
+Total: 60 minutes to understand RAG refactoring
+```
+
+---
+
+### Path 7: Interview Preparation (ML + Architecture)
+```
+ML Model Questions:
+1. ML_INTERVIEW_GUIDE.md Q1-Q10 (30 min)
+
+Architectural Decisions (Learning & Feedback):
+2. ML_INTERVIEW_GUIDE.md Q11-Q14 (30 min)
+   - Q11: RAG refactoring story
+   - Q12: Feature selection honesty
+   - Q13: HTTP API vs MCP decision
+   - Q14: RAG architecture walkthrough
+
+Supporting Docs:
+3. RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md (25 min) - technical depth
+4. WHY_LINEAR_REGRESSION_RANDOMFOREST.md (30 min) - ML reasoning
+
+Total: 115 minutes for complete interview prep
 ```
 
 ---
@@ -568,9 +691,9 @@ btc-intelligent-trader/
 
 ## Documentation Metrics
 
-**Total:** 24 documentation files
-**Total estimated reading time:** ~380 minutes (6.3 hours for everything)
-**Average per doc:** 16 minutes
+**Total:** 30 documentation files
+**Total estimated reading time:** ~540 minutes (9 hours for everything)
+**Average per doc:** 18 minutes
 
 **By Category:**
 - Getting Started: 2 files (15 min)
@@ -581,8 +704,13 @@ btc-intelligent-trader/
   - Telegram: 3 files (42 min)
   - Gmail: 3 files (40 min)
 - ML Models: 2 files (32 min)
-- Setup: 2 files (35 min)
-- Meta: 2 files (15 min)
+- RAG & Data Pipeline: 4 files (120 min)
+  - ML Interview Guide: 1 file (60 min)
+  - RAG Implementation: 2 files (30 min)
+  - ML Architecture: 1 file (30 min)
+- Concepts: 1 file (15 min)
+- Setup: 3 files (55 min)
+- Meta: 2 files (30 min)
 
 **Depth Distribution:**
 -  Quick/User guides: 10 files (beginner-friendly)
@@ -632,6 +760,18 @@ btc-intelligent-trader/
 
 ### "How does LangGraph work?"
 → [AGENT_ARCHITECTURE_NUANCES.md](AGENT_ARCHITECTURE_NUANCES.md)
+
+### "How does RAG work in this project?"
+→ [RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md](RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md)
+
+### "Why did you refactor the RAG system?"
+→ [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md) - Q11
+
+### "How do I prepare for ML interviews?"
+→ [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md)
+
+### "Why HTTP API instead of MCP?"
+→ [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md) - Q13
 
 ### "I'm lost, where do I start?"
 → **This file** (DOCUMENTATION_INDEX.md)
@@ -701,20 +841,28 @@ code_here()
 
 ## Summary
 
-**You have 24 well-organized documentation files:**
+**You have 30 well-organized documentation files:**
 - Modular (each has ONE purpose)
 - Layered (quick → detailed → technical)
 - Example-driven (show, don't just tell)
 - Production-ready (setup, troubleshooting, verification)
+- Interview-ready (ML + architectural decision Q&A)
 
 **This is GOOD AI engineering practice:**
 - Between data science (experimental) and engineering (production)
 - Code is modular AND documented
 - Ready for collaboration/handoff
 - Maintainable and extensible
+- Shows learning process (before/after refactoring)
+
+**Recent Additions (2025-12-13):**
+- ML_INTERVIEW_GUIDE.md updated with Q11-Q14 (architectural decisions)
+- RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md (complete RAG refactoring guide)
+- QUICK_START_RAG_COIN_DESCRIPTIONS.md (5-minute RAG setup)
+- WHY_LINEAR_REGRESSION_RANDOMFOREST.md (ML architecture explanation)
 
 **Keep current structure** unless working with a team, then consider moving to docs/ folder.
 
 ---
 
-**Status:** Documented **Organization:** Modular **Quality:** Production-ready **Last Updated:** 2025-11-30
+**Status:** Documented **Organization:** Modular **Quality:** Production-ready **Last Updated:** 2025-12-13

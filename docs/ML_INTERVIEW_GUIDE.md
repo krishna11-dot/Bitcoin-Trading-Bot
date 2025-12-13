@@ -2,7 +2,7 @@
 
 **Purpose**: Interview-ready explanations of your hybrid Linear Regression + RandomForest model based on actual code.
 
-**Key Insight from Swarnabha Ghosh**:
+**Key Insight **:
 > "The moment you say I am using two models, I would want to know: What is each individual model predicting? What is input feature? What is target feature? And how are you combining? Why are you combining? You need to be very sure of what you are doing."
 
 ---
@@ -730,6 +730,392 @@ Before your interview, make sure you can:
 
 ---
 
-**Version**: 1.0
+## Architectural Decision Interview Questions
+
+These questions cover real architectural decisions you made during development, showing your learning process and ability to take feedback.
+
+---
+
+### Q11: "Tell me about a time you received critical feedback and how you responded."
+
+**Answer**:
+> "My mentor Swarnabha Ghosh reviewed my RAG system and said it was 'overkill' because I was using it to search auto-generated narratives from CSV numbers like 'Bitcoin trading at $70K with RSI 45'. He pointed out that RAG is designed for unstructured text, not structured data that you can easily query with Pandas. I agreed with his assessment and completely refactored the system to use RAG for what it's designed for - semantic search of unstructured coin descriptions from the CoinGecko API. Now when users ask 'Tell me about Bitcoin's history', RAG finds relevant description text that mentions 'first successful internet money' and 'created in 2009 by Satoshi Nakamoto'. This is a proper use case for semantic search that can't be done with simple dataframe filtering."
+
+**The Story**:
+
+```
+BEFORE (Overkill - Mentor's Critique):
+════════════════════════════════════
+Auto-generating narratives from CSV:
+  Row 1: Price=$70K, RSI=45, F&G=32
+     ↓
+  Narrative: "Bitcoin trading at $70K with RSI 45 and fear sentiment"
+     ↓
+  Store in RAG vector database
+     ↓
+  Problem: Could just use pandas filtering!
+  df[(df['price'] > 65000) & (df['rsi'] > 40)]  ← Much simpler!
+
+Swarnabha's Feedback:
+  "RAG is powerful but you're using a sledgehammer to crack a nut.
+   CSV is structured data - use Pandas, not vector embeddings."
+
+AFTER (Justified - Aligned with Feedback):
+════════════════════════════════════════
+Fetching unstructured text from CoinGecko API:
+  Description: "Bitcoin is the first successful internet money
+                based on peer-to-peer technology, created in 2009
+                by Satoshi Nakamoto..."
+     ↓
+  Store in RAG vector database (ChromaDB + SentenceTransformer)
+     ↓
+  Query: "Tell me about Bitcoin's history"
+     ↓
+  Semantic match: "first successful" ↔ "history" (87% similarity)
+     ↓
+  Result: Returns description with historical context
+     ↓
+  Why this is justified: Can't do semantic matching with Pandas!
+```
+
+**What I Changed**:
+1. **Removed**: `add_market_pattern()` and `find_similar_patterns()` methods from [rag_system.py](../src/rag/rag_system.py)
+2. **Added**: `add_coin_description()` and `find_relevant_content()` for unstructured text
+3. **Created**: [initialize_coin_descriptions.py](../src/scripts/initialize_coin_descriptions.py) to fetch descriptions from CoinGecko
+4. **Updated**: Agent code to remove old RAG pattern matching
+5. **Documented**: Complete technical explanation in [RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md](RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md)
+
+**Why This Shows Maturity**:
+- ✅ Accepted valid criticism without defensiveness
+- ✅ Completely refactored (not just a patch)
+- ✅ Understood the underlying principle (RAG for unstructured text)
+- ✅ Can articulate the "before" and "after" clearly
+- ✅ Documented the decision for future reference
+
+**Code Evidence**:
+```python
+# OLD (Removed - was in rag_system.py):
+def add_market_pattern(self, price, rsi, fear_greed, narrative):
+    # ❌ Auto-generated narrative from CSV numbers
+    self.collection.add(
+        documents=[narrative],  # "Bitcoin trading at $70K with RSI 45"
+        metadatas=[{'price': price, 'rsi': rsi}]
+    )
+
+# NEW (Current - in rag_system.py):
+def add_coin_description(self, coin_id, description, metadata=None):
+    # ✅ Unstructured text from CoinGecko API
+    self.collection.add(
+        documents=[f"Coin: {coin_id}\n\nDescription:\n{description}"],
+        ids=[f"coin_{coin_id}_description"],
+        metadatas=[metadata or {}]
+    )
+```
+
+---
+
+### Q12: "How did you select your ML features?"
+
+**Answer**:
+> "I'm going to be honest - I started with 31 features and the model was getting crowded and not performing well. I didn't use statistical feature selection methods like RFE or feature importance scores. Instead, I used domain reasoning to eliminate redundancy. For example, I had both 'price_change_pct' and 'lr_trend', but they both capture the same directional movement, so I kept lr_trend because it can extrapolate to new price ranges. I also removed binary flags like 'higher_highs' and 'lower_lows' because they had low predictive value compared to continuous features like volatility. I ended up with 5 base features that each measure something unique - trend, residual, volatility, volume, and intraday range. This gave me a 48% feature reduction and improved directional accuracy from 49% to 60%."
+
+**The Honest Story**:
+
+```
+ITERATION 1: Too Many Features (31 total)
+════════════════════════════════════════
+Features included:
+  - price, price_change, price_change_pct
+  - sma_50, sma_200, sma_ratio
+  - lr_trend, lr_residual
+  - rolling_std, rolling_min, rolling_max
+  - volume, volume_spike
+  - high_low_range
+  - higher_highs, lower_lows (binary flags)
+  - rsi, macd, atr (from Module 1)
+  ... and more
+
+Problem: 49.7% directional accuracy at $100K (worse than random!)
+Diagnosis: Feature redundancy + interpolation limitation
+
+ITERATION 2: Feature Reduction via Reasoning (16 total)
+════════════════════════════════════════════════════════
+Removed redundant features:
+  ❌ price_change_pct  → Redundant with lr_trend (both measure direction)
+  ❌ sma_ratio         → Redundant with lr_trend (both measure trend)
+  ❌ rolling_min/max   → Redundant with lr_trend (captured in aggregation)
+  ❌ higher_highs      → Low importance binary flag
+  ❌ lower_lows        → Low importance binary flag
+  ❌ RSI/MACD/ATR      → Already used separately in Decision Box
+
+Kept 5 unique features:
+  ✅ lr_trend          → ONLY feature that can extrapolate (critical!)
+  ✅ lr_residual       → Captures anomalies/deviations
+  ✅ rolling_std       → Unique volatility measure
+  ✅ volume_spike      → Unique trading activity measure
+  ✅ high_low_range    → Unique intraday volatility measure
+
+Result: 60% directional accuracy (even at all-time highs)
+Feature Count: 31 → 16 (48% reduction)
+```
+
+**Why I'm Honest About This**:
+- ✅ Shows iterative improvement process
+- ✅ Demonstrates domain reasoning skills
+- ✅ Admits not using advanced statistical methods (but had good reasons)
+- ✅ Shows understanding of redundancy vs uniqueness
+- ✅ Can explain WHY each feature was kept or removed
+
+**What Interviewers Respect**:
+> "I didn't use RFE or feature importance scores. I used reasoning based on what each feature measures. Some engineers might use statistical methods, but I prioritized interpretability - I can explain exactly why each of my 5 features is needed and what unique information it provides. The proof is in the results - 60% accuracy with simple, interpretable features."
+
+**Code Evidence**:
+```python
+# Lines 731-736: module3_prediction.py
+# Final 5 base features (after reduction)
+self.feature_cols = [
+    'lr_trend',        # Trend extrapolation (can't remove - critical!)
+    'lr_residual',     # Anomaly detection (unique measure)
+    'rolling_std',     # Volatility (unique measure)
+    'volume_spike',    # Trading activity (unique measure)
+    'high_low_range'   # Intraday volatility (unique measure)
+]
+
+# These 5 features are aggregated (min/max/avg) → 15 features
+# Plus current_price → 16 total features
+```
+
+**Interview Follow-up Handling**:
+
+*Interviewer: "Why not use automated feature selection like RFE?"*
+
+> "Good question. RFE would optimize for training set performance, but my goal was to create features that can extrapolate to unseen price ranges like $100K+. Statistical methods would likely remove lr_trend because its training importance isn't obvious, but it's critical for extrapolation. I prioritized domain reasoning over statistical optimization, and the 60% accuracy at all-time highs validates that decision."
+
+---
+
+### Q13: "Why didn't you use Model Context Protocol (MCP) for the CoinGecko API?
+
+**Answer**:
+> "I chose to use direct HTTP API calls with the requests library instead of Model Context Protocol. MCP is designed for LLM-tool integration with a server/client architecture, but I didn't need that complexity. My bot just needs to fetch live Bitcoin prices occasionally - a simple GET request works fine. Using direct HTTP gives me easier debugging (I can just print the response JSON), no server setup overhead, and full control over error handling, retries, and rate limiting. The file is named 'coingecko_mcp.py' which is misleading - it's just a standard API client, not using the MCP protocol at all."
+
+**Technical Comparison**:
+
+```
+MCP (Model Context Protocol):
+═══════════════════════════════
+Architecture:
+  ┌─────────────┐         ┌─────────────┐
+  │  LLM Agent  │ ←MCP→   │ MCP Server  │
+  │             │         │ (tools)     │
+  └─────────────┘         └─────────────┘
+                                ↓
+                          External APIs
+
+Requirements:
+  - MCP server setup
+  - Protocol compliance
+  - Server/client communication layer
+  - Tool registration and discovery
+
+Pros:
+  ✅ Standardized LLM-tool integration
+  ✅ Good for multi-tool orchestration
+
+Cons:
+  ❌ Overkill for simple API calls
+  ❌ Harder to debug (protocol inspection)
+  ❌ Additional server infrastructure
+
+Direct HTTP API (My Choice):
+════════════════════════════════
+Architecture:
+  ┌─────────────┐
+  │  Bot Code   │ ──HTTP GET──→ CoinGecko API
+  └─────────────┘
+
+Requirements:
+  - pip install requests
+  - API key (free tier)
+
+Pros:
+  ✅ Simple debugging: print(response.json())
+  ✅ No server setup
+  ✅ Direct control over requests
+  ✅ Standard REST API pattern
+  ✅ Easy to understand and maintain
+
+Cons:
+  ❌ Not using latest LLM integration pattern
+```
+
+**Code Evidence**:
+```python
+# File: src/data_pipeline/coingecko_mcp.py (misleading name!)
+# Lines 301-355
+
+def get_coin_description(self, coin_id: str = 'bitcoin') -> Optional[str]:
+    """
+    Get coin description via direct HTTP API call (NOT MCP protocol).
+    """
+    # Simple HTTP GET request
+    url = f"{self.base_url}/coins/{coin_id}"
+    params = {
+        'localization': 'false',
+        'x_cg_demo_api_key': self.api_key
+    }
+
+    response = requests.get(url, params=params, timeout=15)
+    response.raise_for_status()
+
+    data = response.json()
+    description = data.get('description', {}).get('en', '')
+
+    return description
+```
+
+**Why This Decision Makes Sense**:
+- ✅ Simpler is better for this use case
+- ✅ Easy debugging (critical for production)
+- ✅ No unnecessary dependencies
+- ✅ Faster development time
+- ✅ Shows pragmatic engineering judgment
+
+**What Interviewers Want to Hear**:
+> "I'm aware of MCP as a modern LLM integration pattern, but I chose simplicity over following the latest trend. For a trading bot that just needs to fetch prices occasionally, a direct HTTP call is more maintainable and easier to debug than setting up an MCP server. I'd use MCP if I were building a multi-tool agent system, but for this specific use case, it's overengineering."
+
+---
+
+### Q14: "Walk me through your RAG system architecture."
+
+**Answer**:
+> "My RAG system uses ChromaDB for vector storage and SentenceTransformer for creating 384-dimensional embeddings. When a user asks 'Tell me about Bitcoin's history', the query gets encoded into a 384D vector, ChromaDB finds the closest matching vectors using L2 distance, and returns the most similar coin descriptions. The key nuance is that this is semantic matching, not keyword matching - 'history' matches 'first successful internet money' and 'created in 2009' because those concepts are semantically related in the embedding space, even though the exact words don't appear in the query."
+
+**Technical Flow**:
+
+```
+INITIALIZATION (One-time setup):
+═══════════════════════════════════
+1. Fetch description from CoinGecko API
+   "Bitcoin is the first successful internet money based on
+    peer-to-peer technology, created in 2009 by Satoshi Nakamoto..."
+
+2. SentenceTransformer encodes text → 384D vector
+   [0.12, -0.45, 0.78, ..., 0.34]  (384 numbers)
+
+3. ChromaDB stores vector + original text
+   Location: data/rag_vectordb/chroma.sqlite3
+
+QUERY TIME (When user asks a question):
+═══════════════════════════════════════
+1. User query: "Tell me about Bitcoin's history"
+
+2. SentenceTransformer encodes query → 384D vector
+   [0.15, -0.42, 0.80, ..., 0.31]
+
+3. ChromaDB calculates L2 distance in 384D space
+   Distance = √(Σ(query_i - stored_i)²)
+
+4. Returns closest matches with similarity scores
+   Bitcoin description: 87% similarity (distance=0.15)
+
+5. Agent receives description text for context
+```
+
+**Key Nuances**:
+
+1. **384-Dimensional Embeddings**:
+   - Each dimension captures semantic meaning
+   - "History" and "created in 2009" are close in 384D space
+   - Pre-trained model (all-MiniLM-L6-v2) understands relationships
+
+2. **L2 Distance vs Keywords**:
+   ```
+   Keyword Matching (Simple):
+     Query: "history"
+     Matches: Documents containing the word "history"
+     Misses: "first successful" (semantically related but no keyword match)
+
+   Semantic Matching (RAG):
+     Query: "history"
+     Matches: "first successful internet money" (87% similar)
+             "created in 2009 by Satoshi" (85% similar)
+     Reason: Embeddings capture that these describe historical origins
+   ```
+
+3. **Why ChromaDB Instead of FAISS**:
+   - ChromaDB is user-friendly vector database (easier API)
+   - FAISS is the underlying search algorithm (used internally)
+   - I interact with ChromaDB, never touch FAISS directly
+   - Analogy: Google Drive (ChromaDB) vs Hard Drive (FAISS)
+
+4. **Multi-Dimensional vs Multi-Model**:
+   - Multi-dimensional: ONE embedding with 384 dimensions (semantic space)
+   - NOT multi-model: ONE model (SentenceTransformer), ONE database (ChromaDB)
+   - Confusion: People think 384D = 384 models (it doesn't!)
+
+**Code References**:
+```python
+# Initialize SentenceTransformer model
+# Line 118: src/rag/rag_system.py
+self.model = SentenceTransformer('all-MiniLM-L6-v2')
+
+# Store description in ChromaDB (automatically creates embedding)
+# Line 268: src/rag/rag_system.py
+self.collection.add(
+    documents=[description],  # Original text
+    ids=[f"coin_{coin_id}_description"],
+    metadatas=[metadata]
+)
+# ChromaDB calls self.model.encode() internally
+
+# Query for similar content (automatically encodes query)
+# Line 328: src/rag/rag_system.py
+results = self.collection.query(
+    query_texts=[query],  # "Tell me about Bitcoin's history"
+    n_results=top_k
+)
+# ChromaDB calls self.model.encode() on query, then calculates distances
+```
+
+**Why This Architecture?**:
+- ✅ Semantic search capability (can't do with Pandas)
+- ✅ Persistent storage (SQLite file)
+- ✅ Fast retrieval (vector indexing)
+- ✅ Simple API (ChromaDB handles complexity)
+- ✅ Pre-trained embeddings (no training needed)
+
+---
+
+## Updated Interview Preparation Checklist
+
+Before your interview, make sure you can:
+
+**ML Model Questions**:
+- [ ] Explain what each model predicts (price vs direction) in one sentence
+- [ ] List all 5 base features from memory
+- [ ] Describe the rolling window aggregation (5 → 16 features)
+- [ ] Explain why you use Linear Regression features (extrapolation)
+- [ ] Describe your target columns for both models
+- [ ] Explain that models DON'T combine mathematically
+- [ ] Describe time series → tabular conversion with an example
+- [ ] State your metrics (MAPE <8%, accuracy >65%)
+- [ ] Explain the extrapolation problem and solution
+- [ ] Draw the data flow diagram from memory
+
+**Architectural Decision Questions** (NEW):
+- [ ] Tell the RAG refactoring story (before/after Swarnabha's feedback)
+- [ ] Explain why auto-generated narratives were "overkill"
+- [ ] Describe why coin descriptions justify RAG (semantic search)
+- [ ] Admit you used reasoning, not statistical feature selection
+- [ ] Explain the feature reduction journey (31 → 16 features)
+- [ ] Justify why you chose HTTP API over MCP protocol
+- [ ] Explain ChromaDB + SentenceTransformer architecture
+- [ ] Describe semantic matching vs keyword matching
+- [ ] Clarify 384-dimensional embeddings (not 384 models!)
+- [ ] Explain L2 distance in vector space
+
+---
+
+**Version**: 2.0
 **Last Updated**: 2025-12-13
 **Prepared for**: ML Engineering / Data Science Interviews
