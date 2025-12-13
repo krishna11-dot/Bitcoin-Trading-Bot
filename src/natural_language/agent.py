@@ -45,7 +45,7 @@ class AgentState(TypedDict):
     understanding: Optional[str]
     validated_intent: Optional[Any]
     tool_result: Optional[Dict[str, Any]]
-    rag_context: Optional[list]  # RAG: Similar historical patterns
+    rag_context: Optional[list]  # RAG: Coin descriptions (for future use)
     final_response: Optional[str]
     verbose: bool
 
@@ -77,11 +77,11 @@ class TradingAssistant:
         self.gemini_client = GeminiClient()
         self.verbose = verbose
 
-        # Initialize RAG system for pattern matching
+        # Initialize RAG system (stores unstructured coin descriptions)
         try:
             self.rag = RAGSystem()
             if self.verbose and self.rag.enabled:
-                print("[INFO] RAG system enabled for pattern matching")
+                print("[INFO] RAG system enabled (coin descriptions)")
         except Exception as e:
             print(f"[WARNING] RAG system unavailable: {e}")
             self.rag = None
@@ -409,9 +409,8 @@ Error → "I couldn't fetch the data right now. Please try again in a moment."
 
         Uses:
         - UnifiedDataFetcher: Tries CoinGecko MCP, falls back to CSV
-        - RAG System: Finds similar historical market patterns (if available)
 
-        Returns market data with RAG context for better LLM responses.
+        Returns market data including price, RSI, ATR, MACD, and Fear & Greed Index.
         """
         try:
             from src.modules.module1_technical import get_latest_indicators
@@ -455,31 +454,11 @@ Error → "I couldn't fetch the data right now. Please try again in a moment."
             except Exception:
                 pass  # Fear & Greed not critical
 
-            # Get RSI and prepare for RAG query
+            # Get RSI
             rsi = float(indicators.get('RSI', 50))
 
-            # Use RAG to find similar historical patterns
-            rag_patterns = []
-            if self.rag and self.rag.enabled:
-                try:
-                    current_conditions = {
-                        'price': summary['current_price'],
-                        'rsi': rsi,
-                        'fear_greed': fear_greed if fear_greed != "N/A" else 50,
-                        'narrative': f"Bitcoin trading at ${summary['current_price']:,.0f} with RSI {rsi:.1f}"
-                    }
-
-                    rag_patterns = self.rag.find_similar_patterns(
-                        current_conditions,
-                        top_k=3,
-                        min_similarity=0.5
-                    )
-
-                    if self.verbose and rag_patterns:
-                        print(f"[RAG] Found {len(rag_patterns)} similar patterns")
-                except Exception as e:
-                    if self.verbose:
-                        print(f"[RAG] Pattern matching failed: {e}")
+            # OLD RAG APPROACH REMOVED (was using auto-generated narratives - overkill per Swarnabha)
+            # Now RAG is used only for unstructured coin descriptions (see initialization script)
 
             # Use current date if MCP (live data), otherwise latest CSV date
             from datetime import datetime
@@ -499,7 +478,6 @@ Error → "I couldn't fetch the data right now. Please try again in a moment."
                 "fear_greed": fear_greed,
                 "fear_greed_label": fear_greed_label,
                 "24h_change": summary.get('24h_change'),
-                "rag_patterns": rag_patterns,
                 "is_live": summary.get('price_source') == 'mcp',
                 "status": "success"
             }

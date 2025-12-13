@@ -298,6 +298,62 @@ class CoinGeckoMCP:
             print(f"[COINGECKO] Error fetching trending coins: {e}")
             return None
 
+    def get_coin_description(self, coin_id: str = 'bitcoin') -> Optional[str]:
+        """
+        Get coin description (UNSTRUCTURED TEXT for RAG).
+
+        This is UNSTRUCTURED text - perfect for RAG!
+        Unlike price/volume (structured numbers).
+
+        Args:
+            coin_id: Coin identifier (e.g., 'bitcoin', 'ethereum')
+
+        Returns:
+            String description or None
+
+        Example:
+            mcp = CoinGeckoMCP()
+            desc = mcp.get_coin_description('bitcoin')
+            # Returns: "Bitcoin is the first successful internet money..."
+        """
+        if not self.enabled:
+            return None
+
+        try:
+            self._wait_for_rate_limit()
+
+            url = f"{self.base_url}/coins/{coin_id}"
+            params = {
+                'localization': 'false',  # Only English
+                'tickers': 'false',       # Don't need ticker data
+                'market_data': 'false',   # Don't need price data
+                'community_data': 'false',
+                'developer_data': 'false',
+                'sparkline': 'false',
+                'x_cg_demo_api_key': self.api_key
+            }
+
+            response = requests.get(url, params=params, timeout=15)
+            response.raise_for_status()
+
+            data = response.json()
+
+            # Extract UNSTRUCTURED description text
+            description = data.get('description', {}).get('en', '')
+
+            return description if description else None
+
+        except requests.exceptions.HTTPError as e:
+            if e.response.status_code == 429:
+                print("[COINGECKO] Rate limit exceeded")
+            else:
+                print(f"[COINGECKO] HTTP error: {e}")
+            return None
+
+        except Exception as e:
+            print(f"[COINGECKO] Error fetching description: {e}")
+            return None
+
 
 def main():
     """

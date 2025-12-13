@@ -9,7 +9,7 @@
   "avg_trade_return": -0.01111547300489633,
   "buy_and_hold_return": -0.2007939916743599,
   "ml_direction_accuracy": 0.5138121546961326,
-  "ml_price_rmse": 9238.1143786696,
+  "ml_price_rmse": 9238.114378669597,
   "rsi_signal_win_rate": 0,
   "macd_signal_win_rate": 0,
   "fg_correlation": 0.005193992148181381,

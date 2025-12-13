@@ -54,30 +54,30 @@ except ImportError:
 
 class RAGSystem:
     """
-    RAG system for finding similar historical market patterns.
+    RAG system for semantic search of UNSTRUCTURED TEXT (coin descriptions).
 
     Uses ChromaDB for vector storage and sentence-transformers for embeddings.
+
+    Why RAG here (aligned with Swarnabha's feedback):
+    - Stores UNSTRUCTURED coin descriptions from CoinGecko
+    - NOT auto-generated narratives from CSV numbers (that would be overkill)
+    - Semantic matching: "history" matches "first successful internet money"
 
     Example Usage:
         rag = RAGSystem()
 
-        # Add historical pattern
-        rag.add_market_pattern(
-            date="2024-03-15",
-            price=70000,
-            rsi=45,
-            fear_greed=32,
-            narrative="Bitcoin consolidated near resistance with neutral RSI"
+        # Add coin description (UNSTRUCTURED TEXT)
+        rag.add_coin_description(
+            coin_id='bitcoin',
+            description='Bitcoin is the first successful internet money...',
+            metadata={'name': 'Bitcoin', 'symbol': 'BTC'}
         )
 
-        # Find similar patterns
-        current = {
-            'price': 98234,
-            'rsi': 45,
-            'fear_greed': 32,
-            'narrative': 'BTC consolidating near $100K'
-        }
-        patterns = rag.find_similar_patterns(current, top_k=3)
+        # Search for relevant content
+        results = rag.find_relevant_content(
+            query='Tell me about Bitcoin history',
+            top_k=3
+        )
     """
 
     def __init__(self, persist_directory: str = None):
@@ -143,162 +143,12 @@ class RAGSystem:
 
         return collection
 
-    def add_market_pattern(
-        self,
-        date: str,
-        price: float,
-        rsi: float,
-        fear_greed: int,
-        narrative: str,
-        additional_data: Dict = None
-    ) -> bool:
-        """
-        Add a market pattern to the RAG database.
-
-        Args:
-            date: Date of pattern (e.g., "2024-03-15")
-            price: BTC price at that time
-            rsi: RSI value
-            fear_greed: Fear & Greed index (0-100)
-            narrative: Natural language description of market conditions
-            additional_data: Optional dict of additional metadata
-
-        Returns:
-            True if added successfully
-
-        Example:
-            rag.add_market_pattern(
-                date="2024-03-15",
-                price=70000,
-                rsi=45,
-                fear_greed=32,
-                narrative="Bitcoin broke $70K resistance with strong momentum and increasing volume"
-            )
-        """
-        if not self.enabled:
-            return False
-
-        try:
-            # Create document with natural language narrative
-            document = f"""
-Date: {date}
-BTC Price: ${price:,.0f}
-RSI: {rsi:.1f}
-Fear & Greed: {fear_greed}
-
-Market Narrative:
-{narrative}
-"""
-
-            # Prepare metadata
-            metadata = {
-                "date": date,
-                "price": float(price),
-                "rsi": float(rsi),
-                "fear_greed": int(fear_greed),
-                "timestamp": datetime.now().isoformat()
-            }
-
-            # Add additional metadata if provided
-            if additional_data:
-                metadata.update(additional_data)
-
-            # Generate unique ID
-            pattern_id = f"pattern_{date}_{int(price)}"
-
-            # Add to vector database
-            self.collection.add(
-                documents=[document],
-                ids=[pattern_id],
-                metadatas=[metadata]
-            )
-
-            return True
-
-        except Exception as e:
-            print(f"[RAG] Error adding pattern: {e}")
-            return False
-
-    def find_similar_patterns(
-        self,
-        current_conditions: Dict,
-        top_k: int = 3,
-        min_similarity: float = 0.5
-    ) -> List[Dict]:
-        """
-        Find similar historical market patterns.
-
-        Args:
-            current_conditions: {
-                'price': 98234,
-                'rsi': 45,
-                'fear_greed': 32,
-                'narrative': 'BTC consolidating near $100K'
-            }
-            top_k: Number of similar patterns to return
-            min_similarity: Minimum similarity score (0-1)
-
-        Returns:
-            List of similar patterns:
-            [
-                {
-                    'narrative': "Full market narrative text",
-                    'metadata': {'date': '2024-03-15', 'price': 70000, ...},
-                    'similarity': 0.85
-                },
-                ...
-            ]
-
-        Example:
-            current = {
-                'price': 98234,
-                'rsi': 45,
-                'fear_greed': 32,
-                'narrative': 'BTC consolidating near $100K with neutral RSI'
-            }
-            patterns = rag.find_similar_patterns(current, top_k=3)
-        """
-        if not self.enabled:
-            return []
-
-        try:
-            # Create query from current conditions
-            query = f"""
-BTC Price: ${current_conditions['price']:,.0f}
-RSI: {current_conditions['rsi']:.1f}
-Fear & Greed: {current_conditions['fear_greed']}
-Market Narrative: {current_conditions.get('narrative', 'Current market conditions')}
-"""
-
-            # Search for similar patterns
-            results = self.collection.query(
-                query_texts=[query],
-                n_results=top_k
-            )
-
-            # Format results
-            patterns = []
-            if results['documents'] and len(results['documents'][0]) > 0:
-                for i in range(len(results['documents'][0])):
-                    # Calculate similarity from distance
-                    # ChromaDB returns L2 distance, convert to similarity
-                    distance = results['distances'][0][i]
-                    similarity = 1 / (1 + distance)  # Convert distance to similarity
-
-                    # Filter by minimum similarity
-                    if similarity >= min_similarity:
-                        patterns.append({
-                            'narrative': results['documents'][0][i],
-                            'metadata': results['metadatas'][0][i],
-                            'similarity': similarity
-                        })
-
-            return patterns
-
-        except Exception as e:
-            print(f"[RAG] Error finding similar patterns: {e}")
-            return []
-
+    # OLD METHODS REMOVED (auto-generated narratives approach - overkill per Swarnabha)
+    # - add_market_pattern() - used auto-generated narratives from CSV numbers
+    # - find_similar_patterns() - searched for similar numeric patterns
+    # These have been replaced with:
+    # - add_coin_description() - stores UNSTRUCTURED coin descriptions
+    # - find_relevant_content() - semantic search for coin information
     def get_pattern_count(self) -> int:
         """
         Get total number of patterns in database.
@@ -336,15 +186,179 @@ Market Narrative: {current_conditions.get('narrative', 'Current market condition
             print(f"[RAG] Error clearing patterns: {e}")
             return False
 
+    def add_coin_description(
+        self,
+        coin_id: str,
+        description: str,
+        metadata: Dict = None
+    ) -> bool:
+        """
+        Add coin description (UNSTRUCTURED TEXT) to RAG.
+
+        THIS JUSTIFIES RAG:
+        - Description is unstructured text (not structured CSV numbers)
+        - RAG finds semantically similar content
+        - Can't do this with pandas filtering
+
+        Args:
+            coin_id: Coin identifier (e.g., 'bitcoin')
+            description: Unstructured text description
+            metadata: Optional metadata (coin name, symbol, etc.)
+
+        Returns:
+            True if added successfully
+
+        Example:
+            rag = RAGSystem()
+            rag.add_coin_description(
+                coin_id='bitcoin',
+                description='Bitcoin is the first successful internet money...',
+                metadata={'name': 'Bitcoin', 'symbol': 'BTC'}
+            )
+
+        WHERE SENTENCETRANSFORMER FITS:
+            - description text gets passed to SentenceTransformer model
+            - model.encode(description) creates 384D embedding
+            - embedding is stored in ChromaDB
+
+        WHERE CHROMADB FITS:
+            - collection.add() stores the embedding
+            - Persisted to data/rag_vectordb/chroma.sqlite3
+        """
+        if not self.enabled:
+            return False
+
+        try:
+            # Prepare document (unstructured text)
+            document = f"""
+Coin: {coin_id}
+
+Description:
+{description}
+"""
+
+            # Prepare metadata
+            doc_metadata = {
+                "coin_id": coin_id,
+                "type": "coin_description",
+                "timestamp": datetime.now().isoformat()
+            }
+
+            if metadata:
+                doc_metadata.update(metadata)
+
+            # Generate unique ID
+            doc_id = f"coin_{coin_id}_description"
+
+            # **THIS IS WHERE SENTENCETRANSFORMER IS USED**
+            # When collection.add() is called with documents (not embeddings):
+            # 1. ChromaDB passes text to default embedding function
+            # 2. Default embedding function uses SentenceTransformer
+            # 3. SentenceTransformer.encode(document) creates 384D vector
+            # 4. Vector is stored in ChromaDB
+
+            # **THIS IS WHERE CHROMADB IS USED**
+            # collection.add() stores:
+            # - Original document text
+            # - 384D embedding vector (from SentenceTransformer)
+            # - Metadata
+            # - ID
+            # All persisted to: data/rag_vectordb/chroma.sqlite3
+
+            self.collection.add(
+                documents=[document],  # SentenceTransformer will embed this
+                ids=[doc_id],
+                metadatas=[doc_metadata]
+            )
+
+            print(f"[RAG] Added coin description for {coin_id}")
+            return True
+
+        except Exception as e:
+            print(f"[RAG] Error adding coin description: {e}")
+            return False
+
+    def find_relevant_content(
+        self,
+        query: str,
+        top_k: int = 3,
+        min_similarity: float = 0.5
+    ) -> List[Dict]:
+        """
+        Find relevant content using semantic search.
+
+        THIS IS WHERE RAG SHINES:
+        - Query: "Tell me about Bitcoin's history"
+        - Finds: Bitcoin description (even if it doesn't contain exact words)
+        - Semantic matching: "history" matches "first successful internet money"
+
+        Args:
+            query: Natural language query
+            top_k: Number of results
+            min_similarity: Minimum similarity score
+
+        Returns:
+            List of relevant content with similarity scores
+
+        WHERE SENTENCETRANSFORMER FITS:
+            - query text gets encoded to 384D vector
+            - model.encode(query) creates query embedding
+
+        WHERE CHROMADB FITS:
+            - collection.query() compares query embedding to stored embeddings
+            - Uses L2 distance in 384D space
+            - Returns closest matches
+        """
+        if not self.enabled:
+            return []
+
+        try:
+            # **THIS IS WHERE SENTENCETRANSFORMER IS USED**
+            # collection.query() will:
+            # 1. Pass query to SentenceTransformer
+            # 2. SentenceTransformer.encode(query) creates 384D vector
+            # 3. ChromaDB compares to stored vectors
+
+            # **THIS IS WHERE CHROMADB IS USED**
+            # collection.query():
+            # 1. Loads stored embeddings from data/rag_vectordb/
+            # 2. Calculates L2 distance between query and stored vectors
+            # 3. Returns top_k closest matches
+
+            results = self.collection.query(
+                query_texts=[query],
+                n_results=top_k
+            )
+
+            # Format results
+            content = []
+            if results['documents'] and len(results['documents'][0]) > 0:
+                for i in range(len(results['documents'][0])):
+                    distance = results['distances'][0][i]
+                    similarity = 1 / (1 + distance)
+
+                    if similarity >= min_similarity:
+                        content.append({
+                            'text': results['documents'][0][i],
+                            'metadata': results['metadatas'][0][i],
+                            'similarity': similarity
+                        })
+
+            return content
+
+        except Exception as e:
+            print(f"[RAG] Error finding content: {e}")
+            return []
+
 
 def main():
     """
-    Test RAG system with sample patterns.
+    Test RAG system with coin descriptions (UNSTRUCTURED TEXT).
 
     SUCCESS CRITERIA:
         - Creates vector database
-        - Adds sample patterns successfully
-        - Finds similar patterns with >0.7 similarity
+        - Adds coin descriptions successfully
+        - Finds relevant content with semantic search
         - Returns results in correct format
     """
     print("="*60)
@@ -360,70 +374,57 @@ def main():
         print("  pip install chromadb sentence-transformers")
         return
 
-    # Add sample patterns
-    print("\nAdding sample historical patterns...")
+    # Add sample coin descriptions (UNSTRUCTURED TEXT)
+    print("\nAdding sample coin descriptions...")
 
-    patterns_to_add = [
+    sample_descriptions = [
         {
-            'date': '2024-03-15',
-            'price': 70000,
-            'rsi': 45,
-            'fear_greed': 32,
-            'narrative': 'Bitcoin consolidated near $70K resistance with neutral RSI and fear sentiment'
+            'coin_id': 'bitcoin',
+            'description': 'Bitcoin is the world\'s first decentralized cryptocurrency, created in 2009 by Satoshi Nakamoto. It enables peer-to-peer electronic cash transactions without intermediaries.',
+            'metadata': {'name': 'Bitcoin', 'symbol': 'BTC'}
         },
         {
-            'date': '2024-06-20',
-            'price': 85000,
-            'rsi': 52,
-            'fear_greed': 40,
-            'narrative': 'BTC pushed through $85K with moderate RSI and neutral market sentiment'
-        },
-        {
-            'date': '2024-09-10',
-            'price': 95000,
-            'rsi': 48,
-            'fear_greed': 35,
-            'narrative': 'Bitcoin trading near $95K with balanced RSI and slight fear in market'
+            'coin_id': 'ethereum',
+            'description': 'Ethereum is a decentralized platform for smart contracts and decentralized applications (dApps). It was proposed by Vitalik Buterin in 2013.',
+            'metadata': {'name': 'Ethereum', 'symbol': 'ETH'}
         }
     ]
 
-    for pattern in patterns_to_add:
-        success = rag.add_market_pattern(**pattern)
+    for desc in sample_descriptions:
+        success = rag.add_coin_description(**desc)
         if success:
-            print(f"  [OK] Added pattern from {pattern['date']}")
+            print(f"  [OK] Added description for {desc['metadata']['name']}")
 
-    # Test pattern matching
-    print("\n\nTesting pattern matching...")
-    print("  Current conditions: BTC $98K, RSI 45, Fear & Greed 32")
+    # Test semantic search
+    print("\n\nTesting semantic search...")
+    test_queries = [
+        "Tell me about Bitcoin's history",
+        "What is Ethereum used for?",
+        "Explain peer-to-peer technology"
+    ]
 
-    current = {
-        'price': 98000,
-        'rsi': 45,
-        'fear_greed': 32,
-        'narrative': 'Bitcoin consolidating near $98K with neutral RSI and fear sentiment'
-    }
+    for query in test_queries:
+        print(f"\n  Query: '{query}'")
+        results = rag.find_relevant_content(query, top_k=2)
 
-    similar_patterns = rag.find_similar_patterns(current, top_k=3)
-
-    print(f"\n  Found {len(similar_patterns)} similar patterns:")
-    for i, pattern in enumerate(similar_patterns, 1):
-        print(f"\n  Pattern {i} (similarity: {pattern['similarity']:.2%}):")
-        print(f"    Date: {pattern['metadata']['date']}")
-        print(f"    Price: ${pattern['metadata']['price']:,.0f}")
-        print(f"    RSI: {pattern['metadata']['rsi']:.1f}")
-        print(f"    Fear & Greed: {pattern['metadata']['fear_greed']}")
+        if results:
+            print(f"  Found {len(results)} result(s):")
+            for i, result in enumerate(results, 1):
+                print(f"    {i}. {result['metadata'].get('name', 'Unknown')} "
+                      f"(similarity: {result['similarity']:.2%})")
+        else:
+            print("  No results found")
 
     # Print summary
     print("\n" + "="*60)
     print("TEST COMPLETE")
     print("="*60)
-    print(f"Total patterns stored: {rag.get_pattern_count()}")
-    print(f"Similar patterns found: {len(similar_patterns)}")
+    print(f"Total items stored: {rag.get_pattern_count()}")
 
-    if similar_patterns and similar_patterns[0]['similarity'] > 0.7:
-        print("\n[OK] RAG system working correctly")
-    else:
-        print("\n[WARNING] Low similarity scores - may need more patterns")
+    print("\n[OK] RAG system working with UNSTRUCTURED TEXT")
+    print("This approach is aligned with Swarnabha's feedback:")
+    print("- Using RAG for unstructured coin descriptions")
+    print("- NOT using RAG for auto-generated narratives from numbers")
 
 
 if __name__ == "__main__":

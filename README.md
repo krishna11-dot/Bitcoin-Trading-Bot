@@ -137,12 +137,16 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
                     CORE TRADING SYSTEM
 
                          DATA PIPELINE
-            (CSV Historical Data via Pandas + MCP Live Prices)
+            (CSV Historical Data via Pandas + CoinGecko HTTP API)
 
   • Loads historical BTC data from CSV using Pandas (core trading)
-  • Fetches live prices via MCP CoinGecko API (chat mode)
+  • Fetches live prices via CoinGecko HTTP API (chat mode)
   • RAG pattern matching for natural language queries (chat mode only)
   • Manages rate limiting and API calls
+
+  NOTE: We use direct HTTP API calls (requests.get()), NOT Anthropic's
+  Model Context Protocol (MCP). Reasons: simpler debugging, no protocol
+  overhead, direct control over requests.
 
 
                                  ↓
@@ -205,13 +209,20 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
 
 1. **Data Pipeline** fetches BTC data from multiple sources:
    - **Binance API**: Real-time trading data (live mode)
-   - **CoinGecko MCP**: Optional live prices for chat mode (FREE Demo tier: 30 calls/min)
+   - **CoinGecko HTTP API**: Optional live prices for chat mode (FREE Demo tier: 30 calls/min)
    - **CSV Historical Data**: Backtesting and technical indicators
    - **RAG System**: Historical pattern matching for natural language context
 
    **Data Source Selection**:
-   - Chat mode: MCP (live) → CSV fallback
-   - Backtest mode: CSV only (no MCP for historical consistency)
+   - Chat mode: CoinGecko API (live) → CSV fallback
+   - Backtest mode: CSV only (no API calls for historical consistency)
+
+   **Why HTTP API Instead of MCP (Model Context Protocol)?**
+   - **Simpler debugging**: Direct `requests.get()` calls - easy to inspect with print statements
+   - **No protocol overhead**: No need for MCP server/client setup
+   - **Direct control**: Full control over request headers, params, error handling
+   - **Easier to understand**: Standard REST API pattern familiar to all developers
+   - **Note**: The file is named `coingecko_mcp.py` but it's just an HTTP API client, NOT using Anthropic's MCP protocol
 
    **RAG Usage Note**: Used for natural language pattern matching (e.g., "similar market conditions"), NOT for extracting tabular data.
    For tabular data, use SQL or Pandas (simpler, more efficient). RAG is powerful but should be used where its complexity is justified.
@@ -269,7 +280,7 @@ User Question: "What's today's Bitcoin price?"
 2. Validate Node (Guardrails) → Validates intent is safe (not malicious)
        ↓
 3. Execute Node → Fetches data from FOUR sources:
-       ├─→ MCP (CoinGecko API): Live BTC price ($89,083 as of Dec 7, 2025)
+       ├─→ CoinGecko HTTP API: Live BTC price ($89,083 as of Dec 7, 2025)
        ├─→ CSV Historical Data: Technical indicators (RSI, MACD, ATR)
        ├─→ RAG System: Similar historical patterns (ChromaDB vector search)
        └─→ Backtesting Results: Strategy performance, trade history, metrics
@@ -277,17 +288,28 @@ User Question: "What's today's Bitcoin price?"
        Combines all four sources into structured data
        ↓
 4. Respond Node (Gemini LLM) → Formats as natural language:
-   "BTC is $89,083 (live from CoinGecko). RSI is 29.2 (oversold).
+   "BTC is $89,083 (live from CoinGecko API). RSI is 29.2 (oversold).
     Last time RSI was this low (Jan 2023), BTC rallied +15%.
     Your strategy returned +31.4% in similar conditions (2024 backtest)."
 ```
 
 **Data Source Details:**
 
-1. **MCP (Model Context Protocol)**: Live price from CoinGecko API
+1. **CoinGecko HTTP API** (NOT MCP Protocol): Live price via direct HTTP requests
    - Used for: Current BTC price in chat mode
    - Fallback: CSV if API unavailable
    - NOT used in backtest mode (historical consistency)
+   - **Technical Details**:
+     - Implementation: Direct `requests.get()` calls in [coingecko_mcp.py](src/data_pipeline/coingecko_mcp.py)
+     - Endpoint: `https://api.coingecko.com/api/v3/simple/price`
+     - Authentication: Demo API key (free tier)
+     - Rate limit: 30 calls/min
+   - **Why NOT using Anthropic's MCP?**
+     - MCP = Model Context Protocol (server/client architecture for LLM tool access)
+     - We don't need that complexity - simple HTTP calls work fine
+     - Easier debugging: `print(response.json())` vs MCP protocol inspection
+     - No server setup required: Just `pip install requests`
+     - Direct control: Custom headers, retries, timeout handling
 
 2. **CSV Historical Data**: 2018-2025 Bitcoin price history
    - Used for: Technical indicators (RSI, MACD, ATR)
@@ -295,109 +317,195 @@ User Question: "What's today's Bitcoin price?"
    - Primary source for backtesting
 
 3. **RAG (Retrieval-Augmented Generation)**: ChromaDB vector database
-   - Used for: Natural language pattern matching
-   - Example: "Find similar market conditions to today"
-   - NOT for extracting CSV data (use Pandas for that)
-   - Returns: Similar historical scenarios with outcomes
-   - **Full explanation**: See [RAG_MCP_EXPLAINED.md](docs/RAG_MCP_EXPLAINED.md)
+   - Used for: Semantic search of UNSTRUCTURED TEXT (coin descriptions)
+   - Example: "Tell me about Bitcoin's history and technology"
+   - NOT for structured CSV data (use Pandas for that)
+   - Returns: Relevant coin descriptions with similarity scores
+   - **Full explanation**: See [RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md](docs/RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md)
+   - **Quick start**: See [QUICK_START_RAG_COIN_DESCRIPTIONS.md](QUICK_START_RAG_COIN_DESCRIPTIONS.md)
 
-   **ChromaDB vs FAISS - Understanding the Technology Stack:**
+   **Why This Justifies RAG (Aligned with Mentor Swarnabha's Feedback):**
+
+   The RAG system stores **UNSTRUCTURED TEXT** from CoinGecko API (coin descriptions), NOT auto-generated narratives from CSV numbers. This is appropriate because:
+
+   - **Unstructured text**: Coin descriptions are natural language paragraphs
+   - **Semantic matching**: "history" finds "first successful internet money" (related concepts, not exact words)
+   - **Can't use Pandas**: No way to do semantic search on text with structured data tools
+
+   **ChromaDB & SentenceTransformer - Understanding the Technology Stack:**
 
    ```
-   Your Bot
+   CoinGecko API
        ↓
-   ChromaDB (User-friendly vector database interface)
+   Unstructured Text Description
+   "Bitcoin is the first successful internet money based on peer-to-peer technology..."
        ↓
-   FAISS (Fast similarity search engine - used internally by ChromaDB)
+   SentenceTransformer (all-MiniLM-L6-v2)
+   Converts text → 384-dimensional embedding vector
+   [0.12, -0.45, 0.78, ... 384 numbers]
        ↓
-   Vector Similarity Search Results
+   ChromaDB (Vector Database)
+   Stores embedding + original text + metadata
+   Location: data/rag_vectordb/chroma.sqlite3
+       ↓
+   Query: "Tell me about Bitcoin's history"
+       ↓
+   SentenceTransformer encodes query → 384D vector
+       ↓
+   ChromaDB finds closest vectors (L2 distance in 384D space)
+       ↓
+   Returns: Bitcoin description (87% similarity)
    ```
-
-   **What's Actually Being Used:**
-   - **ChromaDB**: Vector database you interact with (like Google Drive - easy interface)
-   - **FAISS**: Search algorithm ChromaDB uses internally (like hard drive - actual mechanism)
-   - **You use ChromaDB API, never touch FAISS directly**
 
    **How RAG Works - Example Flow:**
 
-   1. **Bot Creates Historical Pattern (During Backtest):**
-      ```
-      Date: 2024-03-15
-      Price: $70,000
-      RSI: 45
-      Fear & Greed: 32
-      Narrative: "Bitcoin consolidated near resistance with neutral RSI and fear sentiment"
-      ```
-
-   2. **ChromaDB Stores Pattern:**
-      - Converts narrative to vector embedding (numerical representation)
-      - Stores in database with metadata (date, price, RSI, Fear & Greed)
-      - Uses FAISS internally for fast vector indexing
-
-   3. **When You Ask a Question:**
-      ```
-      You: "What happened last time BTC was near $100K with neutral RSI?"
+   1. **Fetch Coin Description from CoinGecko (ONE TIME SETUP):**
+      ```python
+      # Unstructured text from CoinGecko API
+      description = "Bitcoin is the world's first decentralized cryptocurrency,
+                     created in 2009 by Satoshi Nakamoto. It enables
+                     peer-to-peer electronic cash transactions without
+                     intermediaries..."
       ```
 
-   4. **ChromaDB Searches:**
-      - Converts your question to vector using Sentence Transformers
-      - FAISS finds similar historical patterns (fast vector similarity search)
-      - Returns top 3 most similar market conditions
+   2. **SentenceTransformer Creates Embedding ([rag_system.py:118](src/rag/rag_system.py#L118)):**
+      ```python
+      # Load model
+      model = SentenceTransformer('all-MiniLM-L6-v2')
 
-   5. **Bot Responds with Historical Context:**
-      ```
-      "In March 2024, when BTC consolidated near $70K with neutral RSI (45),
-       the price broke resistance 2 weeks later and rallied +15%."
+      # Convert text → 384D vector
+      embedding = model.encode(description)
+      # Result: [0.12, -0.45, 0.78, ..., 0.34]  (384 numbers)
       ```
 
-   **ChromaDB vs Direct CSV Access:**
+   3. **ChromaDB Stores Embedding ([rag_system.py:268](src/rag/rag_system.py#L268)):**
+      ```python
+      collection.add(
+          documents=[description],     # Original text
+          ids=["coin_bitcoin_description"],
+          metadatas=[{'name': 'Bitcoin', 'symbol': 'BTC'}]
+      )
+      # Persisted to: data/rag_vectordb/chroma.sqlite3
+      ```
+
+   4. **When You Ask a Question:**
+      ```
+      You: "Tell me about Bitcoin's history and purpose"
+      ```
+
+   5. **SentenceTransformer Encodes Query ([rag_system.py:328](src/rag/rag_system.py#L328)):**
+      ```python
+      # Convert query → 384D vector
+      query_embedding = model.encode("Tell me about Bitcoin's history")
+      ```
+
+   6. **ChromaDB Searches Using L2 Distance:**
+      ```python
+      results = collection.query(
+          query_texts=["Tell me about Bitcoin's history"],
+          n_results=3
+      )
+      # ChromaDB calculates L2 distance in 384D space
+      # Returns closest matching descriptions
+      ```
+
+   7. **Bot Responds with Relevant Content:**
+      ```
+      Found: Bitcoin description (87% similarity)
+      Text: "Bitcoin is the world's first decentralized cryptocurrency,
+             created in 2009 by Satoshi Nakamoto..."
+
+      This matches your query about "history" because the embedding
+      captured that "first cryptocurrency" and "created in 2009"
+      semantically relate to historical origins.
+      ```
+
+   **RAG vs Pandas - When to Use Each:**
 
    | Task | Tool Used | Why |
    |------|-----------|-----|
    | "Show me price on Jan 1, 2024" | Pandas (CSV) | Structured data lookup |
-   | "Find similar market conditions" | ChromaDB (RAG) | Pattern matching with natural language |
+   | "Tell me about Bitcoin's technology" | ChromaDB (RAG) | Semantic search of unstructured text |
    | "Calculate average RSI" | Pandas (CSV) | Mathematical aggregation |
-   | "What happened when fear was this low?" | ChromaDB (RAG) | Semantic similarity search |
+   | "What is Bitcoin's purpose?" | ChromaDB (RAG) | Natural language content retrieval |
 
-   **Without ChromaDB (Manual Search - Slow & Imprecise):**
+   **Why NOT Use RAG for CSV Numbers (Swarnabha's Feedback):**
+
+   ❌ **WRONG (Overkill - This was removed)**:
    ```python
-   for row in csv:
-       if row['rsi'] == 45 and row['price'] > 95000:
-           print(row)
-   # Problems: Must match exact values, no "similarity" concept
+   # Auto-generating narratives from structured CSV data
+   narrative = f"Bitcoin trading at ${price} with RSI {rsi}"
+   rag.add_market_pattern(narrative)  # ❌ Could just use pandas filtering!
+
+   # This can be done simpler:
+   df[(df['price'] > 95000) & (df['rsi'] > 40)]
    ```
 
-   **With ChromaDB (Semantic Search - Fast & Intelligent):**
+   ✅ **CORRECT (Justified - Current implementation)**:
    ```python
-   rag.find_similar_patterns(
-       query="BTC consolidating with low volatility",
+   # Storing UNSTRUCTURED text from external API
+   description = "Bitcoin is the first successful internet money..."
+   rag.add_coin_description(coin_id='bitcoin', description=description)
+
+   # Semantic search: "history" matches "first successful"
+   results = rag.find_relevant_content(query="Tell me about Bitcoin's history")
+   # Can't do this with pandas - it's semantic matching!
+   ```
+
+   **Key Concepts & Nuances:**
+
+   1. **384-Dimensional Embeddings**:
+      - Text is converted to 384 numbers (dimensions)
+      - Each dimension captures semantic meaning
+      - "History" and "first successful" have similar embeddings (close in 384D space)
+
+   2. **L2 Distance vs Cosine Similarity**:
+      - ChromaDB uses L2 distance to find similar vectors
+      - Lower distance = more similar content
+      - Converted to similarity score: `similarity = 1 / (1 + distance)`
+
+   3. **Why Sentence-Transformers?**:
+      - Pre-trained on millions of text examples
+      - Understands semantic relationships (not just keywords)
+      - Example: "cryptocurrency" and "digital money" have similar embeddings
+
+   4. **Multi-Dimensional vs Multi-Model**:
+      - Multi-dimensional: Single embedding with 384 dimensions (semantic space)
+      - NOT multi-model: We use ONE model (SentenceTransformer), ONE database (ChromaDB)
+
+   **Initializing RAG Database (ONE TIME SETUP):**
+   ```bash
+   # Install dependencies
+   pip install chromadb sentence-transformers
+
+   # Fetch Bitcoin description from CoinGecko and store in RAG
+   python src/scripts/initialize_coin_descriptions.py
+
+   # Verify it worked
+   python test_rag_quick.py
+
+   # Check stored patterns
+   ls -la data/rag_vectordb/
+   ```
+
+   **Testing Semantic Search:**
+   ```python
+   from src.rag.rag_system import RAGSystem
+
+   rag = RAGSystem()
+
+   # Query with natural language
+   results = rag.find_relevant_content(
+       query="Tell me about Bitcoin's history",
        top_k=3
    )
-   # Benefits: Finds "similar" patterns, understands natural language, fast vector search
-   ```
 
-   **Technology Stack:**
-   ```
-   Your Question: "Find similar market conditions"
-       ↓
-   Sentence Transformer (converts text → 384-dim vector)
-       ↓
-   ChromaDB API (vector database interface)
-       ↓
-   FAISS (cosine similarity search - finds nearest neighbors)
-       ↓
-   Returns: Top 3 similar historical patterns with similarity scores
-       ↓
-   Gemini LLM uses context to generate natural language answer
-   ```
-
-   **Populating RAG Database:**
-   ```bash
-   # Build RAG index from historical data (stores 2,685+ patterns)
-   python3 main.py --mode backtest --rebuild-rag
-
-   # Check patterns stored
-   ls -la data/rag_vectordb/
+   # Example result:
+   # {
+   #   'text': 'Coin: bitcoin\n\nDescription:\nBitcoin is the first...',
+   #   'metadata': {'name': 'Bitcoin', 'symbol': 'BTC'},
+   #   'similarity': 0.8725  # 87.25% match
+   # }
    ```
 
 4. **Backtest JSON** (optional): `data/processed/backtest_results.json`
