@@ -144,7 +144,7 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
   • RAG pattern matching for natural language queries (chat mode only)
   • Manages rate limiting and API calls
 
-  NOTE: We use direct HTTP API calls (requests.get()), NOT Anthropic's
+  NOTE: We use direct HTTP API calls (requests.get()), NOT
   Model Context Protocol (MCP). Reasons: simpler debugging, no protocol
   overhead, direct control over requests.
 
