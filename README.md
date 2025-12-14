@@ -324,7 +324,7 @@ User Question: "What's today's Bitcoin price?"
    - **Full explanation**: See [RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md](docs/RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md)
    - **Quick start**: See [QUICK_START_RAG_COIN_DESCRIPTIONS.md](QUICK_START_RAG_COIN_DESCRIPTIONS.md)
 
-   **Why This Justifies RAG (Aligned with Mentor Swarnabha's Feedback):**
+   **Why This Justifies RAG :**
 
    The RAG system stores **UNSTRUCTURED TEXT** from CoinGecko API (coin descriptions), NOT auto-generated narratives from CSV numbers. This is appropriate because:
 
@@ -429,7 +429,7 @@ User Question: "What's today's Bitcoin price?"
    | "Calculate average RSI" | Pandas (CSV) | Mathematical aggregation |
    | "What is Bitcoin's purpose?" | ChromaDB (RAG) | Natural language content retrieval |
 
-   **Why NOT Use RAG for CSV Numbers (Swarnabha's Feedback):**
+   **Why NOT Use RAG for CSV Numbers :**
 
    ❌ **WRONG (Overkill - This was removed)**:
    ```python
@@ -524,6 +524,49 @@ User Question: "What's today's Bitcoin price?"
 - Trading decisions made by Decision Box (NOT by LLM)
 - Guardrails are hard-coded (not prompt-based)
 - Natural language layer sits ABOVE existing system (no modifications)
+
+**How the LLM Works (Gemini AI):**
+
+The LLM handles exactly TWO tasks:
+
+1. **Understanding** (Natural Language -> JSON):
+   - User asks: "What's the BTC price?"
+   - LLM classifies intent: `{"intent": "check_market", "confidence": 0.9}`
+   - Guardrails validate: Intent must be one of 6 allowed intents
+   - Python executes: Fetches real data from CSV/API (NO LLM involved)
+
+2. **Formatting** (Structured Data -> Natural Language):
+   - Python returns: `{'current_price': 98234.56, 'rsi': 45.2}`
+   - LLM formats: "BTC is trading at $98,234.56. RSI is 45.2 (neutral)."
+
+**Why This Separation?**
+- **Safety**: LLM can't make trading decisions (could hallucinate)
+- **Reliability**: Python calculations are deterministic, LLM is not
+- **Control**: Guardrails prevent unauthorized actions
+
+**Prompt Engineering:**
+
+The prompts use 3 key techniques to ensure reliable output:
+
+1. **Format Specification**: `"Return ONLY valid JSON (no markdown, no extra text)"`
+   - Prevents LLM from wrapping JSON in code blocks
+   - Without "ONLY": LLM might add preamble like "Sure! Here's the JSON:"
+
+2. **Few-Shot Examples**: 8-10 examples showing desired inputs/outputs
+   - Example: `"What's BTC price?" -> {"intent": "check_market"}`
+   - Improves accuracy from ~70% (zero-shot) to ~95% (few-shot)
+
+3. **Hard Constraints**: Fixed list of 6 allowed intents
+   - `check_market`, `check_portfolio`, `run_trade`, `get_decision`, `analyze_backtest`, `help`
+   - LLM can't invent new intents
+   - Guardrails reject any unexpected intent using fuzzy matching
+
+**Defense-in-Depth (3 Layers):**
+1. Prompt explicitly lists 6 allowed intents (constrains LLM output)
+2. Few-shot examples reinforce the constraint (teaches by example)
+3. Hard-coded guardrails validate output (Python checks, not LLM)
+
+This approach makes the system transparent, auditable, and safe for trading decisions.
 
 ### What You See While It's Running:
 

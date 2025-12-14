@@ -2,7 +2,7 @@
 
 **Purpose:** Master index for all documentation (30 files organized by purpose)
 
-**Last Updated:** 2025-12-13
+**Last Updated:** 2025-12-14
 
 ---
 
@@ -340,16 +340,19 @@
 
 ### 21. [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md) - Complete ML Interview Q&A
 **Purpose:** Interview-ready explanations with code evidence
-**Read time:** 60 minutes
+**Read time:** 75 minutes
 **Read if:** Preparing for ML/data science interviews
 
 **Contains:**
 - Q1-Q10: ML Model questions (hybrid Linear Regression + RandomForest)
-- Q11-Q14: Architectural decision questions (NEW - added 2025-12-13)
-- Q11: RAG refactoring story (responding to mentor feedback)
-- Q12: Feature selection honesty (reasoning vs statistical methods)
-- Q13: HTTP API vs MCP protocol decision
-- Q14: RAG architecture deep dive (ChromaDB + SentenceTransformer)
+- Q11-Q14: Architectural decision questions (added 2025-12-13)
+  - Q11: RAG refactoring story (responding to mentor feedback)
+  - Q12: Feature selection honesty (reasoning vs statistical methods)
+  - Q13: HTTP API vs MCP protocol decision
+  - Q14: RAG architecture deep dive (ChromaDB + SentenceTransformer)
+- Q15-Q16: LLM & Prompt Engineering questions (NEW - added 2025-12-14)
+  - Q15: LLM usage in natural language interface (understanding + formatting)
+  - Q16: Prompt engineering nuances (why specific formats, anatomy of prompts)
 - Complete answers with code line references
 - "Before/after" examples showing learning process
 - Interview preparation checklist
@@ -601,11 +604,16 @@ Architectural Decisions (Learning & Feedback):
    - Q13: HTTP API vs MCP decision
    - Q14: RAG architecture walkthrough
 
-Supporting Docs:
-3. RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md (25 min) - technical depth
-4. WHY_LINEAR_REGRESSION_RANDOMFOREST.md (30 min) - ML reasoning
+LLM & Prompt Engineering (NEW - 2025-12-14):
+3. ML_INTERVIEW_GUIDE.md Q15-Q16 (15 min)
+   - Q15: LLM usage in natural language interface
+   - Q16: Prompt engineering nuances and anatomy
 
-Total: 115 minutes for complete interview prep
+Supporting Docs:
+4. RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md (25 min) - technical depth
+5. WHY_LINEAR_REGRESSION_RANDOMFOREST.md (30 min) - ML reasoning
+
+Total: 130 minutes for complete interview prep
 ```
 
 ---
@@ -692,8 +700,8 @@ btc-intelligent-trader/
 ## Documentation Metrics
 
 **Total:** 30 documentation files
-**Total estimated reading time:** ~540 minutes (9 hours for everything)
-**Average per doc:** 18 minutes
+**Total estimated reading time:** ~555 minutes (9.25 hours for everything)
+**Average per doc:** 18.5 minutes
 
 **By Category:**
 - Getting Started: 2 files (15 min)
@@ -704,8 +712,8 @@ btc-intelligent-trader/
   - Telegram: 3 files (42 min)
   - Gmail: 3 files (40 min)
 - ML Models: 2 files (32 min)
-- RAG & Data Pipeline: 4 files (120 min)
-  - ML Interview Guide: 1 file (60 min)
+- RAG & Data Pipeline: 4 files (135 min)
+  - ML Interview Guide: 1 file (75 min) [Updated 2025-12-14 with Q15-Q16]
   - RAG Implementation: 2 files (30 min)
   - ML Architecture: 1 file (30 min)
 - Concepts: 1 file (15 min)
@@ -772,6 +780,12 @@ btc-intelligent-trader/
 
 ### "Why HTTP API instead of MCP?"
 → [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md) - Q13
+
+### "How does the LLM work in the natural language interface?"
+→ [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md) - Q15
+
+### "Why those specific prompt formats?"
+→ [ML_INTERVIEW_GUIDE.md](ML_INTERVIEW_GUIDE.md) - Q16
 
 ### "I'm lost, where do I start?"
 → **This file** (DOCUMENTATION_INDEX.md)
