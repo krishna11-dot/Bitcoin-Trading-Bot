@@ -222,7 +222,7 @@ The bot uses a modular architecture with 3 core modules feeding into a central D
    - **No protocol overhead**: No need for MCP server/client setup
    - **Direct control**: Full control over request headers, params, error handling
    - **Easier to understand**: Standard REST API pattern familiar to all developers
-   - **Note**: The file is named `coingecko_mcp.py` but it's just an HTTP API client, NOT using Anthropic's MCP protocol
+   - **Note**: The file is named `coingecko_mcp.py` but it's just an HTTP API client, NOT using MCP protocol
 
    **RAG Usage Note**: Used for natural language pattern matching (e.g., "similar market conditions"), NOT for extracting tabular data.
    For tabular data, use SQL or Pandas (simpler, more efficient). RAG is powerful but should be used where its complexity is justified.
@@ -270,27 +270,181 @@ See [docs/WHY_LINEAR_REGRESSION_RANDOMFOREST.md - How ML + Technical Indicators 
 
 #### Natural Language Interface (Mode: chat)
 
-**Single-Agent LangGraph Architecture with Four Data Sources:**
+**Tool Orchestration Architecture - How LLMs Take Actions**
+
+This system implements the 4-step tool orchestration pattern that allows an LLM to go beyond conversation and actually execute actions in the digital world.
+
+**The Core Problem (Why Tool Orchestration Exists):**
+```
+LLMs alone are "probabilistic maps of language" as  they learn how words and ideas
+relate to one another. But that only gets you so far:
+
+  User: "What is 233 divided by 7?"
+  LLM alone: "33.14" (WRONG - it's guessing based on patterns, not computing)
+  LLM + Calculator tool: "33.2857..." (CORRECT - actual computation)
+
+The same applies to trading:
+  User: "What's the BTC price?"
+  LLM alone: "$95,000" (WRONG - hallucinating from training data)
+  LLM + CoinGecko API tool: "$87,042" (CORRECT - live data from API)
+```
+
+**The 4-Step Tool Orchestration Flow:**
 
 ```
-User Question: "What's today's Bitcoin price?"
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 1: DETECT TOOL NEEDED (Understand Node - Gemini LLM)                    │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ PURPOSE: Recognize that user's request requires external action              │
+│                                                                              │
+│ HOW: LLM is trained (via few-shot prompting) to detect semantic cues:       │
+│      "price" → check_market, "news" → query_news, "buy" → get_decision      │
+│                                                                              │
+│ Input:  "What's today's news sentiment?"                                    │
+│ Output: {"intent": "query_news", "parameters": {}, "confidence": 0.95}      │
+│                                                                              │
+│ WHY LLM HERE? Natural language is AMBIGUOUS:                                │
+│   - "bullish news" could mean: news about bulls, positive market sentiment  │
+│   - LLM understands CONTEXT and extracts the correct meaning                │
+│                                                                              │
+│ FILE: src/natural_language/agent.py:_understand_query() (line 266)          │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 2: GENERATE STRUCTURED FUNCTION CALL (Validate Node - Guardrails)       │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ PURPOSE: Validate intent against a "function registry" of allowed actions    │
+│                                                                              │
+│ THE FUNCTION REGISTRY (Hard-coded, not LLM):                                │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ VALID_INTENTS = {                                                       │ │
+│ │     "check_market",      # Get BTC price, RSI, MACD                     │ │
+│ │     "check_portfolio",   # Show holdings, balance                       │ │
+│ │     "run_trade",         # Execute trading cycle                        │ │
+│ │     "get_decision",      # Get recommendation without executing         │ │
+│ │     "analyze_backtest",  # Review past performance                      │ │
+│ │     "query_news",        # Search CryptoPanic news via RAG              │ │
+│ │     "help"               # General help                                 │ │
+│ │ }                                                                       │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│ WHY HARD-CODED GUARDRAILS? (Mentor's Guidance)                              │
+│ "You cannot rely on prompts to control output. You MUST hard-code           │
+│  validation to ensure the output is limited to what you want."              │
+│                                                                              │
+│ EXAMPLE - Without Guardrails:                                               │
+│   LLM might hallucinate: {"intent": "delete_all_data"}                      │
+│   System executes dangerous action                                          │
+│                                                                              │
+│ EXAMPLE - With Guardrails:                                                  │
+│   LLM outputs: {"intent": "delete_all_data"}                                │
+│   Guardrails: "delete_all_data" not in VALID_INTENTS → Rejected → "help"    │
+│                                                                              │
+│ PARAMETER VALIDATION (For query_news):                                      │
+│   LLM extracts: sentiment = "today's" (WRONG - not a valid sentiment)       │
+│   Guardrails: "today's" not in {bullish, bearish, neutral} → Set to None    │
+│                                                                              │
+│ FILE: src/natural_language/guardrails.py (lines 67-75, 106-111)             │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 3: EXECUTE IN ISOLATION (Execute Node - Python Code, NO LLM)            │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ PURPOSE: Call the actual tool/API with deterministic execution              │
+│                                                                              │
+│ WHY NO LLM? Execution must be DETERMINISTIC, not probabilistic:             │
+│   - LLM computing "233/7": guesses "33.14" (pattern matching)               │
+│   - Calculator computing "233/7": returns 33.2857... (actual math)          │
+│                                                                              │
+│ TOOLS AVAILABLE (based on validated intent):                                │
+│ ┌─────────────────────────────────────────────────────────────────────────┐ │
+│ │ Intent          │ Tool Called             │ Data Source                 │ │
+│ │─────────────────┼─────────────────────────┼─────────────────────────────│ │
+│ │ check_market    │ _check_market()         │ CoinGecko API + CSV         │ │
+│ │ query_news      │ _query_news()           │ CryptoPanic → RAG/ChromaDB  │ │
+│ │ analyze_backtest│ _analyze_backtest()     │ backtest_results.json       │ │
+│ │ get_decision    │ _get_decision()         │ Decision Box logic          │ │
+│ └─────────────────────────────────────────────────────────────────────────┘ │
+│                                                                              │
+│ EXAMPLE - query_news execution:                                             │
+│   1. RAG.query_news("Bitcoin market news", sentiment_filter=None)           │
+│   2. ChromaDB performs vector similarity search (L2 distance)               │
+│   3. Returns: [{title: "JPMorgan...", sentiment: "neutral", sim: 48%}]      │
+│                                                                              │
+│ KEY INSIGHT: This step has NO LLM involvement - pure Python/API calls       │
+│              No hallucination possible - deterministic results              │
+│                                                                              │
+│ FILE: src/natural_language/agent.py:_execute_tool() (line 341)              │
+└─────────────────────────────────────────────────────────────────────────────┘
+                                       ↓
+┌─────────────────────────────────────────────────────────────────────────────┐
+│ STEP 4: RE-INSERT RESULT (Respond Node - Gemini LLM)                         │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                              │
+│ PURPOSE: Format tool results as natural language for the user               │
+│          This is called "return injection" - feeding results back to LLM    │
+│                                                                              │
+│ Input (from Step 3):                                                        │
+│   {                                                                         │
+│     "query": "Bitcoin market news",                                         │
+│     "results": [                                                            │
+│       {"title": "JPMorgan launches tokenized fund", "sentiment": "neutral"},│
+│       {"title": "BlackRock ETF filing", "sentiment": "neutral"}             │
+│     ],                                                                      │
+│     "total_indexed_chunks": 3                                               │
+│   }                                                                         │
+│                                                                              │
+│ Prompt to LLM:                                                              │
+│   "TODAY'S DATE: 2025-12-19                                                 │
+│    User asked: 'What's today's news sentiment?'                             │
+│    System returned: {tool_result}                                           │
+│    Format this as a natural, friendly response."                            │
+│                                                                              │
+│ Output (to user):                                                           │
+│   "Here's today's news sentiment:                                           │
+│    - JPMorgan launches first-ever tokenized money market fund (Neutral)     │
+│    - BlackRock Files for Ethereum Staking ETF (Neutral)                     │
+│    All news articles today have neutral sentiment."                         │
+│                                                                              │
+│ WHY LLM HERE AGAIN?                                                         │
+│   - Raw tool output is structured data (JSON)                               │
+│   - Users want natural language, not JSON dumps                             │
+│   - LLM excels at formatting and explanation                                │
+│                                                                              │
+│ FILE: src/natural_language/agent.py:_format_response() (line 372)           │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+**Summary - Where LLM is Used vs NOT Used:**
+
+| Step | LLM Used? | Why |
+|------|-----------|-----|
+| 1. Understand | YES | Parse ambiguous natural language |
+| 2. Validate | NO | Hard-coded guardrails prevent hallucination |
+| 3. Execute | NO | Deterministic API/database calls |
+| 4. Respond | YES | Format results as natural language |
+
+**Data Sources (5 total):**
+
+```
+User Question: "What's today's Bitcoin price and news?"
        ↓
-1. Understand Node (Gemini LLM) → Interprets intent: "check_market"
-       ↓
-2. Validate Node (Guardrails) → Validates intent is safe (not malicious)
-       ↓
-3. Execute Node → Fetches data from FOUR sources:
-       ├─→ CoinGecko HTTP API: Live BTC price ($89,083 as of Dec 7, 2025)
+3. Execute Node → Fetches data from FIVE sources:
+       ├─→ CoinGecko HTTP API: Live BTC price ($87,042 as of Dec 19, 2025)
        ├─→ CSV Historical Data: Technical indicators (RSI, MACD, ATR)
-       ├─→ RAG System: Similar historical patterns (ChromaDB vector search)
+       ├─→ CryptoPanic News API: Fetches news articles (100 req/month free tier)
+       ├─→ RAG System (ChromaDB): Semantic search of indexed news
        └─→ Backtesting Results: Strategy performance, trade history, metrics
        ↓
-       Combines all four sources into structured data
+       Combines all sources into structured data
        ↓
 4. Respond Node (Gemini LLM) → Formats as natural language:
-   "BTC is $89,083 (live from CoinGecko API). RSI is 29.2 (oversold).
-    Last time RSI was this low (Jan 2023), BTC rallied +15%.
-    Your strategy returned +31.4% in similar conditions (2024 backtest)."
+   "BTC is $87,042 (live from CoinGecko API). RSI is 29.2 (oversold).
+    Today's news sentiment is neutral: JPMorgan launched tokenized fund,
+    BlackRock filed for ETF."
 ```
 
 **Data Source Details:**
@@ -316,205 +470,165 @@ User Question: "What's today's Bitcoin price?"
    - Always loaded in background
    - Primary source for backtesting
 
-3. **RAG (Retrieval-Augmented Generation)**: ChromaDB vector database
-   - Used for: Semantic search of UNSTRUCTURED TEXT (coin descriptions)
-   - Example: "Tell me about Bitcoin's history and technology"
-   - NOT for structured CSV data (use Pandas for that)
-   - Returns: Relevant coin descriptions with similarity scores
-   - **Full explanation**: See [RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md](docs/RAG_COIN_DESCRIPTIONS_IMPLEMENTATION.md)
-   - **Quick start**: See [QUICK_START_RAG_COIN_DESCRIPTIONS.md](QUICK_START_RAG_COIN_DESCRIPTIONS.md)
+3. **RAG System (TWO Data Sources)**:
 
-   **Why This Justifies RAG :**
+   The RAG (Retrieval-Augmented Generation) system uses ChromaDB to store and search **unstructured text** that can't be queried with SQL or Pandas. We have **TWO** data sources:
 
-   The RAG system stores **UNSTRUCTURED TEXT** from CoinGecko API (coin descriptions), NOT auto-generated narratives from CSV numbers. This is appropriate because:
+   | RAG Source | Data Type | Example Query | Status |
+   |------------|-----------|---------------|--------|
+   | Coin Descriptions (CoinGecko) | Crypto explanations | "What is Bitcoin?" | Optional |
+   | **News Articles (CryptoPanic)** | Real-time news with sentiment | "What's the latest news?" | **Active** |
 
-   - **Unstructured text**: Coin descriptions are natural language paragraphs
-   - **Semantic matching**: "history" finds "first successful internet money" (related concepts, not exact words)
-   - **Can't use Pandas**: No way to do semantic search on text with structured data tools
-
-   **ChromaDB & SentenceTransformer - Understanding the Technology Stack:**
+   **Why RAG Instead of Pandas?**
 
    ```
-   CoinGecko API
-       ↓
-   Unstructured Text Description
-   "Bitcoin is the first successful internet money based on peer-to-peer technology..."
+   PANDAS (Structured Data):
+   df[df['price'] > 90000]  # ✅ Works - exact value match
+   df[df['description'].contains('history')]  # ❌ Only keyword match, no semantics
+
+   RAG (Unstructured Text):
+   rag.query("Tell me about Bitcoin's history")
+   # ✅ Finds: "first successful internet money" (semantic match!)
+   # RAG understands "history" relates to "first" and "origins"
+   ```
+
+   **The Technology Stack:**
+
+   ```
+   TEXT INPUT (news article or coin description)
        ↓
    SentenceTransformer (all-MiniLM-L6-v2)
-   Converts text → 384-dimensional embedding vector
-   [0.12, -0.45, 0.78, ... 384 numbers]
+   - Converts text → 384-dimensional vector
+   - Pre-trained on millions of text pairs
+   - Understands semantic relationships
        ↓
    ChromaDB (Vector Database)
-   Stores embedding + original text + metadata
-   Location: data/rag_vectordb/chroma.sqlite3
+   - Stores: embedding + text + metadata
+   - Location: data/rag_vectordb/chroma.sqlite3
+   - Uses L2 distance for similarity search
        ↓
-   Query: "Tell me about Bitcoin's history"
+   QUERY: "What's the news about ETF?"
        ↓
-   SentenceTransformer encodes query → 384D vector
-       ↓
-   ChromaDB finds closest vectors (L2 distance in 384D space)
-       ↓
-   Returns: Bitcoin description (87% similarity)
+   Returns: Top 5 most similar chunks with similarity scores
    ```
 
-   **How RAG Works - Example Flow:**
+   **Key Concept**
 
-   1. **Fetch Coin Description from CoinGecko (ONE TIME SETUP):**
-      ```python
-      # Unstructured text from CoinGecko API
-      description = "Bitcoin is the world's first decentralized cryptocurrency,
-                     created in 2009 by Satoshi Nakamoto. It enables
-                     peer-to-peer electronic cash transactions without
-                     intermediaries..."
-      ```
-
-   2. **SentenceTransformer Creates Embedding ([rag_system.py:118](src/rag/rag_system.py#L118)):**
-      ```python
-      # Load model
-      model = SentenceTransformer('all-MiniLM-L6-v2')
-
-      # Convert text → 384D vector
-      embedding = model.encode(description)
-      # Result: [0.12, -0.45, 0.78, ..., 0.34]  (384 numbers)
-      ```
-
-   3. **ChromaDB Stores Embedding ([rag_system.py:268](src/rag/rag_system.py#L268)):**
-      ```python
-      collection.add(
-          documents=[description],     # Original text
-          ids=["coin_bitcoin_description"],
-          metadatas=[{'name': 'Bitcoin', 'symbol': 'BTC'}]
-      )
-      # Persisted to: data/rag_vectordb/chroma.sqlite3
-      ```
-
-   4. **When You Ask a Question:**
-      ```
-      You: "Tell me about Bitcoin's history and purpose"
-      ```
-
-   5. **SentenceTransformer Encodes Query ([rag_system.py:328](src/rag/rag_system.py#L328)):**
-      ```python
-      # Convert query → 384D vector
-      query_embedding = model.encode("Tell me about Bitcoin's history")
-      ```
-
-   6. **ChromaDB Searches Using L2 Distance:**
-      ```python
-      results = collection.query(
-          query_texts=["Tell me about Bitcoin's history"],
-          n_results=3
-      )
-      # ChromaDB calculates L2 distance in 384D space
-      # Returns closest matching descriptions
-      ```
-
-   7. **Bot Responds with Relevant Content:**
-      ```
-      Found: Bitcoin description (87% similarity)
-      Text: "Bitcoin is the world's first decentralized cryptocurrency,
-             created in 2009 by Satoshi Nakamoto..."
-
-      This matches your query about "history" because the embedding
-      captured that "first cryptocurrency" and "created in 2009"
-      semantically relate to historical origins.
-      ```
-
-   **RAG vs Pandas - When to Use Each:**
-
-   | Task | Tool Used | Why |
-   |------|-----------|-----|
-   | "Show me price on Jan 1, 2024" | Pandas (CSV) | Structured data lookup |
-   | "Tell me about Bitcoin's technology" | ChromaDB (RAG) | Semantic search of unstructured text |
-   | "Calculate average RSI" | Pandas (CSV) | Mathematical aggregation |
-   | "What is Bitcoin's purpose?" | ChromaDB (RAG) | Natural language content retrieval |
-
-   **Why NOT Use RAG for CSV Numbers :**
-
-   ❌ **WRONG (Overkill - This was removed)**:
-   ```python
-   # Auto-generating narratives from structured CSV data
-   narrative = f"Bitcoin trading at ${price} with RSI {rsi}"
-   rag.add_market_pattern(narrative)  # ❌ Could just use pandas filtering!
-
-   # This can be done simpler:
-   df[(df['price'] > 95000) & (df['rsi'] > 40)]
-   ```
-
-   ✅ **CORRECT (Justified - Current implementation)**:
-   ```python
-   # Storing UNSTRUCTURED text from external API
-   description = "Bitcoin is the first successful internet money..."
-   rag.add_coin_description(coin_id='bitcoin', description=description)
-
-   # Semantic search: "history" matches "first successful"
-   results = rag.find_relevant_content(query="Tell me about Bitcoin's history")
-   # Can't do this with pandas - it's semantic matching!
-   ```
-
-   **Key Concepts & Nuances:**
-
-   1. **384-Dimensional Embeddings**:
-      - Text is converted to 384 numbers (dimensions)
+   1. **Why 384 Dimensions?**
+      - SentenceTransformer (all-MiniLM-L6-v2) outputs 384-D vectors
       - Each dimension captures semantic meaning
-      - "History" and "first successful" have similar embeddings (close in 384D space)
+      - Similar texts = close vectors in 384D space
 
-   2. **L2 Distance vs Cosine Similarity**:
-      - ChromaDB uses L2 distance to find similar vectors
-      - Lower distance = more similar content
-      - Converted to similarity score: `similarity = 1 / (1 + distance)`
+   2. **Why L2 Distance?**
+      - L2 = Euclidean distance: `sqrt(sum((a[i] - b[i])^2))`
+      - Lower distance = more similar
+      - Converted to similarity: `1 / (1 + distance)`
 
-   3. **Why Sentence-Transformers?**:
-      - Pre-trained on millions of text examples
-      - Understands semantic relationships (not just keywords)
-      - Example: "cryptocurrency" and "digital money" have similar embeddings
-
-   4. **Multi-Dimensional vs Multi-Model**:
-      - Multi-dimensional: Single embedding with 384 dimensions (semantic space)
-      - NOT multi-model: We use ONE model (SentenceTransformer), ONE database (ChromaDB)
-
-   **Initializing RAG Database (ONE TIME SETUP):**
-   ```bash
-   # Install dependencies
-   pip install chromadb sentence-transformers
-
-   # Fetch Bitcoin description from CoinGecko and store in RAG
-   python src/scripts/initialize_coin_descriptions.py
-
-   # Verify it worked
-   python test_rag_quick.py
-
-   # Check stored patterns
-   ls -la data/rag_vectordb/
-   ```
-
-   **Testing Semantic Search:**
-   ```python
-   from src.rag.rag_system import RAGSystem
-
-   rag = RAGSystem()
-
-   # Query with natural language
-   results = rag.find_relevant_content(
-       query="Tell me about Bitcoin's history",
-       top_k=3
-   )
-
-   # Example result:
-   # {
-   #   'text': 'Coin: bitcoin\n\nDescription:\nBitcoin is the first...',
-   #   'metadata': {'name': 'Bitcoin', 'symbol': 'BTC'},
-   #   'similarity': 0.8725  # 87.25% match
-   # }
-   ```
+   3. **Why ChromaDB?**
+      - Free, local, no server needed
+      - Persists to SQLite (survives restarts)
+      - Simple Python API
 
 4. **Backtest JSON** (optional): `data/processed/backtest_results.json`
    - Used for: Portfolio metrics, past performance
    - Accessed when user asks about "my portfolio" or "backtest results"
    - Contains: Total return, Sharpe ratio, win rate, etc.
 
+5. **CryptoPanic News API** (NEW - Dec 2025): Real-time crypto news with sentiment
+   - API: `https://cryptopanic.com/api/developer/v2/posts/`
+   - Free tier: 100 requests/month (Developer tier)
+   - Used for: News sentiment analysis, market intelligence
+   - Indexed into RAG for semantic search
+
+   **CryptoPanic News RAG Architecture:**
+
+   ```
+   ┌─────────────────────────────────────────────────────────────────────────────┐
+   │ CRYPTOPANIC NEWS RAG SYSTEM                                                  │
+   ├─────────────────────────────────────────────────────────────────────────────┤
+   │                                                                              │
+   │ 1. FETCH NEWS (CryptoPanic API v2)                                          │
+   │    └─ GET /api/developer/v2/posts/?currencies=BTC&public=true               │
+   │                                                                              │
+   │ 2. TEXT CHUNKING (TextChunker)                                              │
+   │    └─ Splits long articles into 400-char chunks with 50-char overlap        │
+   │    └─ Preserves sentence boundaries for semantic coherence                  │
+   │                                                                              │
+   │ 3. EMBEDDING (SentenceTransformer)                                          │
+   │    └─ Converts each chunk to 384-dimensional vector                         │
+   │                                                                              │
+   │ 4. STORAGE (ChromaDB)                                                       │
+   │    └─ Stores: embedding, text, metadata (title, sentiment, published_at)    │
+   │    └─ Collection: "market_patterns"                                         │
+   │    └─ Type filter: "news_article"                                           │
+   │                                                                              │
+   │ 5. QUERY (Semantic Search)                                                  │
+   │    └─ User: "Any bullish news?"                                             │
+   │    └─ Filter: type="news_article" AND sentiment="bullish"                   │
+   │    └─ Returns: Top 5 most similar chunks                                    │
+   │                                                                              │
+   │ FILES:                                                                       │
+   │ ├─ src/data_pipeline/cryptopanic_client.py (API client, rate limiting)      │
+   │ ├─ src/rag/text_chunker.py (sentence-boundary chunking)                     │
+   │ ├─ src/rag/rag_system.py (add_news_article, query_news methods)             │
+   │ └─ src/natural_language/agent.py (_query_news method)                       │
+   └─────────────────────────────────────────────────────────────────────────────┘
+   ```
+
+   **Why Text Chunking for News?**
+
+   ```
+   PROBLEM: News articles are 500-2000 characters
+   SentenceTransformer context: 512 tokens max
+   Some articles EXCEED the limit!
+
+   SOLUTION: TextChunker splits articles:
+   - Chunk size: 400 characters (fits in 512 token limit)
+   - Overlap: 50 characters (preserves context at boundaries)
+   - Split at sentence boundaries (not mid-sentence)
+
+   EXAMPLE:
+   Original article (800 chars): "JPMorgan launches tokenized fund. The fund
+   uses blockchain technology. This marks a shift in traditional finance..."
+
+   Chunk 1 (400 chars): "JPMorgan launches tokenized fund. The fund uses
+   blockchain technology."
+
+   Chunk 2 (400 chars, with 50-char overlap): "blockchain technology. This
+   marks a shift in traditional finance..."
+   ```
+
+   **Rate Limiting for CryptoPanic:**
+
+   ```
+   Free tier: 100 requests/month
+   Conservative limit: 3 requests/day (100/30 = 3.3)
+
+   CACHING STRATEGY:
+   - Cache news to: data/cache/cryptopanic/news_BTC_2025-12-19.json
+   - Reuse cached data for same-day queries
+   - Only hit API once per day per currency
+   ```
+
+   **Testing News RAG:**
+
+   ```python
+   from src.rag.rag_system import RAGSystem
+
+   rag = RAGSystem()
+
+   # Index news (uses 1 API call)
+   result = rag.index_cryptopanic_news(currency='BTC', limit=10)
+   print(f"Indexed {result['chunks_indexed']} chunks")
+
+   # Query news semantically
+   results = rag.query_news("Bitcoin ETF institutional", top_k=3)
+   for r in results:
+       print(f"- {r['title'][:50]}... ({r['similarity']:.0%})")
+   ```
+
 **Why LangGraph?**
-- Industry-standard agent framework (resume value)
+- Industry-standard agent framework 
 - Clean state machine architecture (each node has one responsibility)
 - State management built-in (shared state flows through nodes)
 - Learning experience with modern agentic frameworks
@@ -806,6 +920,292 @@ Low hash_rate + Empty mempool = Network activity low → Neutral
 3. **RandomForest Training**: Learns patterns from 16 features → Direction (UP/DOWN)
 4. **Prediction**: Every 5 minutes in live mode, every day in backtest
 5. **Confidence Score**: RandomForest probability (0-1) indicates prediction certainty
+
+---
+
+#### Visual Architecture Diagrams
+
+**RandomForest = Technique (Classifier vs Regressor)**:
+```
+                    ┌─────────────────────────┐
+                    │     RANDOM FOREST       │
+                    │      (Technique)        │
+                    │   Many trees voting     │
+                    └────────────┬────────────┘
+                                 │
+              ┌──────────────────┴──────────────────┐
+              │                                     │
+              ▼                                     ▼
+┌─────────────────────────────┐     ┌─────────────────────────────┐
+│   RandomForestCLASSIFIER    │     │   RandomForestREGRESSOR     │
+│   Trees vote on CATEGORIES  │     │   Trees vote on NUMBERS     │
+│   Output: "UP" or "DOWN"    │     │   Output: $73,500.00        │
+│   Answer = Most common vote │     │   Answer = Average vote     │
+└─────────────────────────────┘     └─────────────────────────────┘
+
+YOUR MODELS:
+1. RandomForestClassifier → Predicts DIRECTION (UP/DOWN) + confidence
+2. RandomForestRegressor  → Predicts PRICE ($73,500)
+Both use SAME technique (many trees voting), different output type!
+```
+
+**5 Base Features → 16 Total Features (Rolling Window)**:
+```
+STEP 1: 5 base features calculated per day
+  lr_trend, lr_residual, rolling_std, volume_spike, high_low_range
+
+STEP 2: Aggregate each feature over 7-day window
+  ┌─────────────────────────────────────────────────────────────┐
+  │                    7-DAY ROLLING WINDOW                     │
+  │   [Day 1] [Day 2] [Day 3] [Day 4] [Day 5] [Day 6] [Day 7]  │
+  └─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+     For each feature: calculate MIN, MAX, AVG
+     lr_trend → lr_trend_min, lr_trend_max, lr_trend_avg
+
+STEP 3: The Math
+  5 features × 3 aggregations = 15 features
+  + 1 current_price = 16 TOTAL FEATURES
+```
+
+**Two Models: Same Input, Different Output**:
+```
+                    ┌─────────────────────────────────────┐
+                    │          16 INPUT FEATURES          │
+                    │  (lr_trend_min, lr_trend_max, ...)  │
+                    └──────────────────┬──────────────────┘
+                                       │
+              ┌────────────────────────┴────────────────────────┐
+              │                                                 │
+              ▼                                                 ▼
+┌──────────────────────────────────┐     ┌──────────────────────────────────┐
+│      RandomForest REGRESSOR      │     │      RandomForest CLASSIFIER     │
+│                                  │     │                                  │
+│  QUESTION: "What will the       │     │  QUESTION: "Which DIRECTION      │
+│             PRICE be in 7 days?" │     │             will price go?"      │
+│                                  │     │                                  │
+│  OUTPUT:                         │     │  OUTPUT:                         │
+│  predicted_price: $73,500        │     │  direction: "UP"                 │
+│                                  │     │  confidence: 0.68                │
+└──────────────────────────────────┘     └──────────────────────────────────┘
+              │                                          │
+              └────────────────┬─────────────────────────┘
+                               │
+                               ▼
+              ┌─────────────────────────────────────────┐
+              │        BOTH OUTPUTS (NOT COMBINED)      │
+              │  Decision Box uses BOTH independently   │
+              └─────────────────────────────────────────┘
+```
+
+**Complete ML Pipeline**:
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│ STAGE 1: RAW DATA → CSV/API (Date, Price, High, Low, Volume)          │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    ↓
+┌────────────────────────────────────────────────────────────────────────┐
+│ STAGE 2: FEATURE ENGINEERING (5 base features)                         │
+│   Linear Regression: lr_trend, lr_residual (can extrapolate to ATH!)  │
+│   Volatility: rolling_std, high_low_range                              │
+│   Volume: volume_spike                                                 │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    ↓
+┌────────────────────────────────────────────────────────────────────────┐
+│ STAGE 3: ROLLING WINDOW AGGREGATION (5 → 16 features)                  │
+│   5 features × 3 (min/max/avg) + current_price = 16 features          │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    ↓
+         ┌──────────────────────────┴──────────────────────────┐
+         ↓                                                     ↓
+┌─────────────────────────┐                    ┌─────────────────────────┐
+│ REGRESSOR → Price       │                    │ CLASSIFIER → Direction  │
+│ Output: $73,500         │                    │ Output: UP (68% conf)   │
+└─────────────────────────┘                    └─────────────────────────┘
+         │                                                     │
+         └──────────────────────────┬──────────────────────────┘
+                                    ↓
+┌────────────────────────────────────────────────────────────────────────┐
+│ STAGE 4: DECISION BOX                                                  │
+│   ML Predictions + RSI + MACD + Fear & Greed + ATR                    │
+│   → FINAL DECISION: DCA_BUY / SWING_BUY / HOLD / SELL                 │
+└────────────────────────────────────────────────────────────────────────┘
+
+WHY LINEAR REGRESSION FEATURES ARE CRITICAL:
+┌─────────────────────────────────────────────────────────────────────────┐
+│  WITHOUT lr_trend: RandomForest trained on $20K-$90K FAILS at $100K   │
+│  WITH lr_trend: lr_trend extrapolates → RandomForest adjusts → 60%    │
+│  This is why Linear Regression is for FEATURE ENGINEERING, not pred.  │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+#### Detailed Feature Explanations with Examples
+
+**lr_trend - Where the Price is Heading:**
+```
+Example: Past 7 days of BTC prices
+  Day 1: $60,000
+  Day 2: $62,000
+  Day 3: $64,000
+  Day 4: $66,000
+  Day 5: $68,000
+  Day 6: $70,000
+  Day 7: $72,000
+
+Linear Regression draws a "best fit line" through these points:
+  slope = +$2,000 per day
+
+lr_trend = "Where will this line be tomorrow?"
+         = $72,000 + $2,000 = $74,000
+
+MEANING: "If the current trend continues, price will be $74,000"
+```
+
+**lr_residual - Deviation from Trend:**
+```
+Example:
+  Linear Regression trend says: $72,000 (expected based on trend)
+  Actual current price:         $75,000 (reality)
+
+lr_residual = $75,000 - $72,000 = +$3,000
+
+MEANING: "Price is $3,000 ABOVE the trend line"
+         → Price is running HOT (maybe overbought, correction coming?)
+
+If lr_residual = -$2,000:
+         → Price is BELOW trend line (maybe oversold, bounce coming?)
+```
+
+**The Extrapolation Problem Solved:**
+```
+WITHOUT lr_trend (RandomForest alone):
+  Training data: $3,000 to $90,000 (2018-2024)
+  Test at $100,000: 49.7% accuracy (worse than random!)
+  Problem: RandomForest can only INTERPOLATE (predict within training range)
+           It CANNOT EXTRAPOLATE (predict beyond what it's seen)
+
+WITH lr_trend (Hybrid approach):
+  Linear Regression: "If $60K→$70K→$80K→$90K, next is $100K→$110K"
+  lr_trend extrapolates → RandomForest learns to adjust based on volatility
+  Result: 60% accuracy at all-time highs
+```
+
+---
+
+#### Why Two RandomForest Models? (Detailed Scenarios)
+
+**REGRESSOR alone - Not Enough:**
+```
+Predicts: $98,500
+Problem: Is that UP or DOWN from current $97,000?
+         Only +1.5% gain - is that meaningful?
+         No confidence score!
+```
+
+**CLASSIFIER alone - Not Enough:**
+```
+Predicts: UP with 68% confidence
+Problem: UP by how much? $100? $10,000?
+         No target price for profit-taking!
+```
+
+**TOGETHER - Complete Picture:**
+
+**Scenario A - Strong Signal (Take Action):**
+```
+Regressor: $105,000 (+8% from current $97,000)
+Classifier: UP with 85% confidence
+
+Analysis: Large expected gain + High confidence
+Decision: SWING_BUY $500 (big position, high conviction)
+```
+
+**Scenario B - Weak Signal (Wait):**
+```
+Regressor: $98,500 (+1.5% from current $97,000)
+Classifier: UP with 55% confidence
+
+Analysis: Small expected gain + Low confidence
+Decision: HOLD (wait for better opportunity)
+```
+
+**Scenario C - Conflicting Signal (Don't Trade):**
+```
+Regressor: $90,000 (-7% from current, predicts DOWN)
+Classifier: UP with 60% confidence
+
+Analysis: Regressor says DOWN, Classifier says UP (conflict!)
+Decision: HOLD (signals disagree, too risky)
+```
+
+---
+
+#### Decision Box Logic (How Final Decisions are Made)
+
+**Inputs to Decision Box:**
+```
+FROM ML MODELS:
+├── predicted_price: $98,500 (from Regressor)
+├── direction: "UP" (from Classifier)
+└── confidence: 0.68 (from Classifier)
+
+FROM TECHNICAL INDICATORS:
+├── RSI: 45 (neutral - not overbought/oversold)
+├── MACD: bullish crossover
+└── ATR: $2,345 (volatility level)
+
+FROM SENTIMENT:
+└── Fear & Greed Index: 32 (fear - people scared)
+```
+
+**Decision Logic (Simplified):**
+```python
+if direction == "UP" AND confidence > 0.70 AND RSI < 60:
+    → SWING_BUY: "ML confident + RSI confirms not overbought"
+    → Action: Buy $500 worth (large position)
+
+elif fear_greed < 40 AND RSI < 60:
+    → DCA_BUY: "Market fear = good accumulation opportunity"
+    → Action: Buy $30 worth (small, defensive)
+
+elif RSI > 70:
+    → TAKE_PROFIT: "Overbought, sell some gains"
+    → Action: Sell 10% of position
+
+elif direction == "DOWN" AND confidence > 0.75:
+    → HOLD or REDUCE: "ML predicts drop with high confidence"
+    → Action: Don't buy, maybe sell some
+
+else:
+    → HOLD: "No clear signal from any indicator"
+    → Action: Wait for better setup
+```
+
+**Why Not Just Use ML Alone?**
+```
+Example of ML + Technical Indicators working together:
+
+ML says: "UP with 80% confidence"
+RSI says: 85 (extremely overbought!)
+
+WRONG approach (ML only):
+  → BUY (ML says UP!)
+  → But price is overbought, likely to drop
+  → LOSS
+
+CORRECT approach (ML + RSI):
+  → ML says BUY, but RSI says OVERBOUGHT
+  → Decision Box: HOLD (wait for RSI cooldown)
+  → Avoided the loss!
+
+THE POINT: ML is ONE signal among many
+           Decision Box combines ALL signals for safer trading
+```
+
+---
 
 See [Module 3 ML Explained](docs/MODULE3_ML_EXPLAINED.md) for detailed technical explanation and [Old vs New Comparison](docs/OLD_VS_NEW_COMPARISON.md) for performance benchmarks.
 
@@ -1435,8 +1835,9 @@ Start with [QUICKSTART.md](docs/QUICKSTART.md) if you're new to the project.
 
 ---
 
-**Last Updated**: 2025-12-08
+**Last Updated**: 2025-12-19
 **Project Status**: Active Development & Cloud Deployed
+**Recent Changes**: Added CryptoPanic News RAG system with tool orchestration architecture
 **Deployment**:
 - **Primary**: Google Cloud Platform (GCP) - Ubuntu 22.04 VM with tmux
 - **Secondary**: Local Windows (Windows Service via NSSM)
